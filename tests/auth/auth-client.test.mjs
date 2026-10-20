@@ -35,3 +35,9 @@ test('an expired token is discarded and cannot be reused',async()=>{
 test('remote connections require HTTPS',()=>{
   assert.throws(()=>new AuthClient({url:'http://example.com',key:'key'}),/HTTPS_REQUIRED/);
 });
+test('PostgREST business errors remain actionable without trusting arbitrary text',async()=>{
+ let n=0;
+ const client=new AuthClient({url:'https://example.supabase.co',key:'public-key',fetcher:async()=>++n===1?response({access_token:'token',user:{id:'u'}}):response({code:'40001',message:'VERSION_CONFLICT'},409)});
+ await client.signIn('a@example.test','password');
+ await assert.rejects(client.stores(),/VERSION_CONFLICT/);
+});

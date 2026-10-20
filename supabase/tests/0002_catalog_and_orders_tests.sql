@@ -1,0 +1,11 @@
+BEGIN;
+SELECT plan(7);
+SELECT has_table('public','products','Products are persisted');
+SELECT has_table('public','orders','Orders are persisted');
+SELECT has_table('public','order_items','Price snapshots are persisted');
+SELECT has_function('public','rpc_save_order',ARRAY['uuid','uuid','uuid','text','uuid','jsonb','jsonb','uuid','integer'],'Order RPC exists');
+SELECT ok(NOT has_table_privilege('authenticated','public.orders','INSERT'),'Clients cannot bypass server price calculations');
+SELECT ok(NOT has_function_privilege('anon','public.rpc_save_order(uuid,uuid,uuid,text,uuid,jsonb,jsonb,uuid,integer)','EXECUTE'),'Anonymous orders are denied');
+SELECT ok(EXISTS(SELECT 1 FROM pg_indexes WHERE schemaname='public' AND indexname='orders_one_open_order_per_table'),'One open order per table is constrained');
+SELECT * FROM finish();
+ROLLBACK;

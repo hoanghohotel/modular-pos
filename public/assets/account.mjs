@@ -1,3 +1,4 @@
+import './sales.mjs';
 import { AuthClient } from './auth-client.mjs';
 const el = id => document.getElementById(id);
 let client;
@@ -6,7 +7,7 @@ const message = text => { el('status').textContent = text; };
 function panels() {
   el('loginPanel').hidden = Boolean(client?.signedIn);
   el('workspacePanel').hidden = !client?.signedIn;
-  if (!client?.signedIn) el('bootstrapPanel').hidden = true;
+  if (!client?.signedIn) { el('bootstrapPanel').hidden = true; window.dispatchEvent(new CustomEvent('workspace:ready', { detail: null })); }
 }
 async function perform(action) {
   document.querySelectorAll('button').forEach(b => { b.disabled = true; });
@@ -29,6 +30,7 @@ async function perform(action) {
 function selectedStore() {
   const store = stores.find(s => s.id === el('stores').value);
   el('storeSummary').textContent = store ? `${store.name} · ${store.code}` : 'Chưa có cửa hàng được cấp quyền.';
+  window.dispatchEvent(new CustomEvent('workspace:ready', { detail: { client, store } }));
 }
 async function loadWorkspace() {
   const [organizations, accessibleStores] = await Promise.all([client.organizations(), client.stores()]);

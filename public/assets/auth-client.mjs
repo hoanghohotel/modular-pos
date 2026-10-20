@@ -19,7 +19,8 @@ export class AuthClient {
     const data = response.status === 204 ? null : await response.json();
     if (!response.ok) {
       if (response.status === 401 && authenticated) this.#token = null;
-      throw new Error(data?.error_code || data?.code || `HTTP_${response.status}`);
+      const businessCode = typeof data?.message === 'string' ? data.message.match(/^([A-Z][A-Z_]+)(?::|$)/)?.[1] : null;
+      throw new Error(data?.error_code || businessCode || data?.code || `HTTP_${response.status}`);
     }
     return data;
   }
