@@ -35,6 +35,7 @@ for(const width of [390,1280]) test(`online sales UI at ${width}px`,{timeout:900
    else if(url.pathname.endsWith('/rpc/rpc_store_context'))data={can_manage_catalog:true,can_sell:true,can_manage_shift:true,can_collect:true,can_void:true,can_refund:true,can_report:true};
    else if(url.pathname.endsWith('/rpc/rpc_open_shift')){shifts=[{id:'66666666-6666-4666-8666-666666666666',opened_by:user,opening_amount:body.p_opening_amount,closed_at:null}];data=shifts[0];}
    else if(url.pathname.endsWith('/rpc/rpc_save_order')){
+    if(failSave==='server'){await route.fulfill({status:500,contentType:'application/json',headers,body:JSON.stringify({message:'Temporary failure'})});return;}
     if(failSave){await route.abort('internetdisconnected');return;}
     assert.equal(body.p_items[0].variant_id,variant.id);
     assert.equal(body.p_items[0].price,undefined);
@@ -80,8 +81,16 @@ for(const width of [390,1280]) test(`online sales UI at ${width}px`,{timeout:900
   assert.equal(await page.locator('#paymentForm').isVisible(),false);
   await page.locator('#offlineCashForm').waitFor({state:'visible'});
   // A lost save response is durably queued with the original request ID.
-  failSave=true;
+  failSave='server';
   await page.locator('#addItem').click();await page.locator('#saveOrder').click();
+  await page.waitForFunction(()=>document.getElementById('salesStatus').textContent.includes('Chưa xác nhận'));
+  await page.locator('#offlineReceived').fill('100000');
+  await page.locator('#offlineCashForm input[type=checkbox]').check();
+  await page.locator('#offlineCashForm button').click();
+  await page.waitForFunction(()=>document.getElementById('salesStatus').textContent.includes('Lần lưu online trước chưa rõ'));
+  assert.equal(await page.locator('#outboxList li').count(),0,'Uncertain online save must not become a second cash intent');
+  failSave=true;
+  await page.locator('#saveOrder').click();
   await page.waitForFunction(()=>document.getElementById('outboxSummary').textContent.startsWith('1 đơn'));
   failSave=false;
   await page.reload();

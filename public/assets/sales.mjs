@@ -191,7 +191,9 @@ el('reportForm').addEventListener('submit',e=>{e.preventDefault();run(async()=>{
  el('reportSummary').textContent=`${report.date} · ${report.timezone} · ${report.paid_orders} thanh toán · Đã thu ${money(report.gross)} · Hoàn ${money(report.refunds)} · Thu ròng ${money(Number(report.gross)-Number(report.refunds))}`;
 });});
 
-async function enqueueLocal(cash,operationId=crypto.randomUUID()){
+async function enqueueLocal(cash,operationId=null){
+ if(pending&&!operationId){status('Lần lưu online trước chưa rõ kết quả. Bấm Lưu đơn hàng để thử lại cùng yêu cầu trước khi ghi nhận tiền mặt hoặc tạo bản lưu tại máy.');return;}
+ operationId??=crypto.randomUUID();
  if(!outbox||!api?.signedIn||!context.can_sell)throw new Error('AUTH_REQUIRED');
  if(editing){status('Chỉ hỗ trợ đơn mới trong hàng đợi offline.');return;}
  if(!cart.length){status('Thêm món trước khi lưu tại máy.');return;}
@@ -215,12 +217,13 @@ async function enqueueLocal(cash,operationId=crypto.randomUUID()){
 async function showOutbox(){
  const queue=outbox;if(!queue)return;
  const records=await queue.list();if(queue!==outbox)return;
+ const conflicts={OFFLINE_PRICE_CONFLICT:'Giá đã thay đổi. Cần đối soát số tiền trước khi thử lại.',OPEN_SHIFT_REQUIRED:'Ca thu tiền không còn mở. Cần đối soát với quản lý.',PERMISSION_DENIED:'Tài khoản không còn quyền đồng bộ đơn này.',VARIANT_UNAVAILABLE:'Size đã ngừng bán.',MODIFIER_UNAVAILABLE:'Topping đã ngừng bán.',POSITION_NOT_FOUND:'Bàn không còn khả dụng.','23505':'Bàn đã có đơn đang mở.',IDEMPOTENCY_KEY_REUSED:'Mã yêu cầu đã được dùng cho dữ liệu khác. Cần đối soát.'};
  const pending=records.filter(r=>r.status!=='ACKNOWLEDGED');
  el('outboxSummary').textContent=pending.length+' đơn chưa đồng bộ · '+pending.filter(r=>r.status==='CONFLICT').length+' xung đột';
  el('outboxList').replaceChildren(...records.slice(-20).reverse().map(record=>{
   const li=document.createElement('li');
   li.textContent=record.operationId.slice(0,8)+' · '+money(record.payload.p_expected_total)+' · '+
-   (record.status==='ACKNOWLEDGED'?'Đã đồng bộ':record.status==='CONFLICT'?'Cần xử lý: '+record.error:'Chờ đồng bộ')+
+   (record.status==='ACKNOWLEDGED'?'Đã đồng bộ':record.status==='CONFLICT'?'Cần xử lý: '+(conflicts[record.error]||'Server chưa chấp nhận dữ liệu. Kiểm tra đơn và quyền tài khoản.'):'Chờ đồng bộ')+
    (record.payload.p_received_amount!==null?' · Đã ghi nhận nhận tiền mặt tại máy':'');
   return li;
  }));
