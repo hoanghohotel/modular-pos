@@ -44,3 +44,17 @@ test('native fetch keeps its global receiver during sign-in',async()=>{
  await client.signIn('a@example.test','password');
  assert.equal(client.signedIn,true);
 });
+test('PostgREST business errors remain actionable without trusting arbitrary text',async()=>{
+ let n=0;
+ const client=new AuthClient({url:'https://example.supabase.co',key:'public-key',fetcher:async()=>++n===1?response({access_token:'token',user:{id:'u'}}):response({code:'40001',message:'VERSION_CONFLICT'},409)});
+ await client.signIn('a@example.test','password');
+ await assert.rejects(client.stores(),/VERSION_CONFLICT/);
+});
+test('native fetch keeps its global receiver when called through the client',async()=>{
+ const client=new AuthClient({url:'https://example.supabase.co',key:'public-key',fetcher:async function(){
+  assert.equal(this,globalThis);
+  return response({access_token:'token',user:{id:'u'}});
+ }});
+ await client.signIn('a@example.test','password');
+ assert.equal(client.userId,'u');
+});
