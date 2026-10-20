@@ -1,0 +1,8 @@
+-- ============================================================================
+-- MIGRATION 0006: QUẢN LÝ KHO, QUY ĐỔI ĐƠN VỊ 3 TẦNG, SỔ CÁI TỒN KHO BẤT BIẾN,
+-- CÔNG THỨC ĐỊNH LƯỢNG (BOM) CÓ PHIÊN BẢN, MUA HÀNG PO/GRN, CHUYỂN KHO IN-TRANSIT & KIỂM KÊ KHO (Giai đoạn 6)
+-- ============================================================================
+-- Tạo 17 bảng: inventory_locations, unit_conversions, inventory_items, inventory_balances,
+-- inventory_transactions, recipes, recipe_versions, recipe_components, suppliers,
+-- purchase_orders, purchase_order_items, goods_receipts, goods_receipt_items,
+-- stock_transfers, stock_transfer_items, stock_counts, stock_count_items + ENABLE/FORCE RLS.

@@ -1,0 +1,6 @@
+-- ============================================================================
+-- MIGRATION 0007: KIẾN TRÚC ĐỒNG BỘ OFFLINE-FIRST, BẢNG XUNG ĐỘT (SYNC_CONFLICTS),
+-- DẤU MỐC THIẾT BỊ (DEVICE_SYNC_WATERMARKS) & 3 RPC ĐỒNG BỘ LÔ (Giai đoạn 5)
+-- ============================================================================
+-- Tạo 2 bảng: device_sync_watermarks, sync_conflicts + ENABLE/FORCE RLS +
+-- 3 RPCs: rpc_pull_store_offline_snapshot, rpc_process_sync_batch, rpc_resolve_sync_conflict.

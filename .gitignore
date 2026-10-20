@@ -1,0 +1,32 @@
+# Dependencies
+node_modules/
+.pnpm-store/
+
+# Next.js / Turbo build outputs
+.next/
+out/
+dist/
+build/
+.turbo/
+
+# Environment variables & Secrets (Tuyệt đối không commit secret thật)
+.env
+.env.local
+.env.*.local
+
+# Supabase local development
+supabase/.branches
+supabase/.temp
+
+# Flutter / Dart build artifacts
+.dart_tool/
+.flutter-plugins
+.flutter-plugins-dependencies
+.packages
+pubspec.lock
+
+# Database dumps & OS files
+*.dump
+*.sql.gz
+.DS_Store
+Thumbs.db

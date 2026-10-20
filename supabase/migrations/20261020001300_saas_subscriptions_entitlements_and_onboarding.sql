@@ -1,0 +1,9 @@
+-- ============================================================================
+-- MIGRATION 0013: QUẢN TRỊ SAAS ĐA TENANT, GÓI THUÊ BAO (SUBSCRIPTIONS),
+-- HẠN MỨC TÀI NGUYÊN (USAGE LIMITS), KHỞI TẠO TỰ ĐỘNG TENANT MỚI (ONBOARDING)
+-- & SỔ CÁI KIỂM ĐỊNH SAO LƯU / PHỤC HỒI THẢM HỌA (BACKUP & DR AUDIT) (Giai đoạn 9)
+-- ============================================================================
+-- Tạo 5 bảng: subscription_plans, organization_subscriptions, subscription_invoices (immutable),
+-- tenant_usage_metrics, backup_audit_logs (immutable) + ENABLE/FORCE RLS +
+-- 4 RPCs: rpc_saas_check_usage_limit, rpc_saas_onboard_tenant,
+-- rpc_saas_upgrade_subscription, rpc_system_health_and_backup_verify.

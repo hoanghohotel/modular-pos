@@ -1,0 +1,29 @@
+name: Modular POS CI (Phase 1 - Phase 9)
+
+on:
+  push:
+    branches: [main, develop]
+  pull_request:
+    branches: [main]
+
+jobs:
+  domain-and-contract-tests:
+    name: Run Domain & Offline Sync Tests (Node.js 20)
+    runs-on: ubuntu-latest
+    steps:
+      - name: Checkout repository
+        uses: actions/checkout@v4
+
+      - name: Setup Node.js 20
+        uses: actions/setup-node@v4
+        with:
+          node-version: '20'
+
+      - name: Verify SQL Migrations & pgTAP Test Files Exist
+        run: |
+          ls -la supabase/migrations/
+          ls -la supabase/tests/
+
+      - name: Run Automated Test Suites (Phase 3 -> Phase 9)
+        run: |
+          node --test packages/domain-specs/test/*.test.mjs

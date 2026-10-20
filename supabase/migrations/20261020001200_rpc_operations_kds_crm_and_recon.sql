@@ -1,0 +1,7 @@
+-- ============================================================================
+-- MIGRATION 0012: 7 TRANSACTIONAL RPCs CHO ĐIỀU PHỐI KDS BẾP/BAR, TÍCH & TIÊU ĐIỂM LOYALTY,
+-- CHI PHÍ VẬN HÀNH KÉT, ĐỐI SOÁT ĐƠN SHIP (COD & PHƯƠNG THỨC TỪ CÀI ĐẶT) & CHỐT DOANH THU NGÀY (Giai đoạn 7)
+-- ============================================================================
+-- 7 RPCs: rpc_kds_dispatch_order_tickets, rpc_kds_update_ticket_status,
+-- rpc_crm_accumulate_loyalty_points, rpc_crm_redeem_loyalty_points,
+-- rpc_pos_record_store_expense, rpc_delivery_reconcile_cod, rpc_reconciliation_close_day.

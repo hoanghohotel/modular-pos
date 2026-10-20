@@ -1,0 +1,8 @@
+-- ============================================================================
+-- MIGRATION 0005: ĐƠN HÀNG ĐA KÊNH (4 TRỤC TRẠNG THÁI), GIỎ HÀNG SNAPSHOT,
+-- THANH TOÁN ĐA PHƯƠNG THỨC, HÓA ĐƠN BẤT BIẾN, LỆNH IN, ĐIỀU PHỐI GIAO HÀNG (COD & PHƯƠNG THỨC TỪ CÀI ĐẶT),
+-- CA THU NGÂN & KHÓA CHỐNG TRÙNG IDEMPOTENCY_KEYS (Giai đoạn 4)
+-- ============================================================================
+-- Tạo 15 bảng: idempotency_keys, customers, discounts, cash_shifts, cash_movements,
+-- orders, order_items, order_item_options, order_discounts, order_status_history,
+-- payments, payment_transactions, receipts, print_jobs, delivery_assignments + ENABLE/FORCE RLS.

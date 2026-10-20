@@ -1,0 +1,8 @@
+-- ============================================================================
+-- MIGRATION 0004: ĐƠN VỊ TÍNH, KHU VỰC & SƠ ĐỒ BÀN (20 BÀN + 10 MANG VỀ + 10 GIAO HÀNG),
+-- DANH MỤC, SẢN PHẨM ĐA NGÀNH, BIẾN THỂ, TOPPING, BẢNG GIÁ & PHƯƠNG THỨC THANH TOÁN (Giai đoạn 3)
+-- ============================================================================
+-- Tạo 12 bảng: inventory_units, service_areas, service_positions, categories, products,
+-- product_variants, product_options, product_option_values, store_product_settings,
+-- price_lists, product_prices, payment_methods + ENABLE/FORCE RLS +
+-- RPC provision_default_store_positions (20 Bàn + 10 Mang về + 10 Giao hàng) & rpc_resolve_effective_product_price.

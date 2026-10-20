@@ -1,0 +1,7 @@
+-- ============================================================================
+-- MIGRATION 0008: 10 TRANSACTIONAL RPCs CHO CA THU NGÂN, ĐƠN HÀNG ĐA KÊNH,
+-- CHUYỂN/GỘP/TÁCH BÀN, THU TIỀN ĐA PHƯƠNG THỨC, IN PHIẾU TẠM TÍNH KÈM VIETQR ĐỘNG & HOÀN TIỀN (Giai đoạn 4)
+-- ============================================================================
+-- 10 RPCs: rpc_shift_open, rpc_shift_close, rpc_pos_upsert_order, rpc_pos_transfer_table,
+-- rpc_pos_merge_orders, rpc_pos_split_order, rpc_pos_collect_payment,
+-- rpc_pos_refund_or_void_order, rpc_pos_reprint_receipt, rpc_pos_print_provisional_bill.

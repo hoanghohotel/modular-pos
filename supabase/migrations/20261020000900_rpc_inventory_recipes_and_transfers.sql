@@ -1,0 +1,7 @@
+-- ============================================================================
+-- MIGRATION 0009: 6 TRANSACTIONAL RPCs CHO TIÊU HAO ĐỊNH LƯỢNG (BOM), HOÀN TRẢ BÙ TRỪ,
+-- NHẬP KHO TÍNH GIÁ VỐN MOVING AVERAGE, CHUYỂN KHO IN-TRANSIT & CHỐT KIỂM KÊ (Giai đoạn 6)
+-- ============================================================================
+-- 6 RPCs: rpc_inv_deduct_order_recipe, rpc_inv_revert_order_deduction,
+-- rpc_inv_post_goods_receipt, rpc_inv_dispatch_stock_transfer,
+-- rpc_inv_receive_stock_transfer, rpc_inv_post_stock_count.

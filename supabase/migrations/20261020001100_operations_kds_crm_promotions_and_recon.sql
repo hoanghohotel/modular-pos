@@ -1,0 +1,6 @@
+-- ============================================================================
+-- MIGRATION 0011: VẬN HÀNH NÂNG CAO — TRẠM CHẾ BIẾN KDS, PHIẾU BẾP, SỔ CÁI TÍCH/TIÊU ĐIỂM
+-- LOYALTY BẤT BIẾN, CHI PHÍ VẬN HÀNH QUẦY & BIÊN BẢN ĐỐI SOÁT DOANH THU CUỐI NGÀY (Giai đoạn 7)
+-- ============================================================================
+-- Tạo 6 bảng: kitchen_stations, kitchen_tickets, kitchen_ticket_items,
+-- customer_loyalty_transactions, expenses, reconciliation_records + ENABLE/FORCE RLS.

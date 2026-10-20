@@ -1,0 +1,15 @@
+{
+  "name": "modular-pos-monorepo",
+  "version": "2.0.0-production",
+  "private": true,
+  "type": "module",
+  "description": "Hệ thống POS đa ngành, đa chi nhánh, kiến trúc Offline-first (PostgreSQL/Supabase + Next.js Web Admin/POS + Flutter POS)",
+  "scripts": {
+    "test": "node --test packages/domain-specs/test/*.test.mjs",
+    "db:reset": "supabase db reset",
+    "db:test": "supabase test db"
+  },
+  "engines": {
+    "node": ">=18.18.0"
+  }
+}
