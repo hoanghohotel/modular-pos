@@ -33,3 +33,6 @@ Thumbs.db
 
 # Generated Graphify knowledge graph (uploaded as a CI artifact)
 graphify-out/
+
+# Build-time public configuration
+public/app-config.js
