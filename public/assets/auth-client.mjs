@@ -7,7 +7,7 @@ export class AuthClient {
     if (!key || key.includes('your-')) throw new Error('SUPABASE_NOT_CONFIGURED');
     this.url = parsed.href.replace(/\/$/, '');
     this.key = key;
-    this.fetcher = fetcher;
+    this.fetcher = fetcher.bind(globalThis);
   }
   get userId() { return this.#userId; }
   get signedIn() { return this.#token !== null; }
