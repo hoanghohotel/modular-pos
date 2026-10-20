@@ -17,6 +17,8 @@ for(const width of [390,1280]) test(`online sales UI at ${width}px`,{timeout:900
  try{
   const page=await browser.newPage({viewport:{width,height:900}});
   const errors=[];page.on('pageerror',e=>errors.push(e.message));
+  page.on('console',m=>{if(m.type()==='error')console.error('browser console:',m.text());});
+  page.on('requestfailed',r=>console.error('request failed:',r.url(),r.failure()?.errorText));
   const user='11111111-1111-4111-8111-111111111111',org='22222222-2222-4222-8222-222222222222',store='33333333-3333-4333-8333-333333333333';
   const product={id:'44444444-4444-4444-8444-444444444444',name:'Cà phê sữa',category:'Cà phê',active:true};
   const variant={id:'55555555-5555-4555-8555-555555555555',product_id:product.id,name:'M',price:35000,active:true};
@@ -55,7 +57,8 @@ for(const width of [390,1280]) test(`online sales UI at ${width}px`,{timeout:900
   await page.goto(`http://127.0.0.1:${server.address().port}/account.html`);
   await page.locator('#email').fill('owner@example.test');await page.locator('#password').fill('correct-password');
   await page.locator('#loginForm button[type=submit]').click();
-  await page.locator('#salesPanel').waitFor({state:'visible'});
+  try { await page.locator('#salesPanel').waitFor({state:'visible',timeout:15000}); }
+  catch(error){ throw new Error(JSON.stringify({phase:'workspace loading',errors,status:await page.locator('#status').textContent(),salesStatus:await page.locator('#salesStatus').textContent()})+' '+error.message); }
   await page.locator('#openingCash').fill('100000');await page.locator('#openShiftForm button').click();
   await page.waitForFunction(()=>document.getElementById('shiftSummary').textContent.includes('66666666'));
   await page.locator('#itemQuantity').fill('2');await page.locator('#addItem').click();

@@ -140,9 +140,9 @@ function renderFinance(){
 }
 async function refreshFinance(){
  const current=generation;
- const [shifts,paid,refunds]=await Promise.all([rows('cash_shifts','*','&order=opened_at.desc&limit=100'),rows('payments','*','&order=created_at.desc&limit=100'),rows('refunds','payment_id')]);
+ const [shifts,paid,refunds,ownOpen]=await Promise.all([rows('cash_shifts','*','&order=opened_at.desc&limit=100'),rows('payments','*','&order=created_at.desc&limit=100'),rows('refunds','payment_id'),rows('cash_shifts','*',`&opened_by=eq.${api.userId}&closed_at=is.null&limit=1`)]);
  if(current!==generation)return;
- currentShift=shifts.find(s=>s.opened_by===api.userId&&!s.closed_at)||null;
+ currentShift=ownOpen.find(s=>s.opened_by===api.userId&&!s.closed_at)||null;
  payments=paid.filter(p=>!refunds.some(r=>r.payment_id===p.id));
  el('refundPayment').replaceChildren(option('','Chọn thanh toán'),...payments.map(p=>option(p.id,`${p.order_id.slice(0,8)} · ${p.method==='CASH'?'Tiền mặt':'Chuyển khoản'} · ${money(p.amount)}`)));
  el('shiftHistory').replaceChildren(...shifts.slice(0,20).map(s=>{const li=document.createElement('li');li.textContent=s.closed_at?`Ca ${s.id.slice(0,8)} · Dự kiến ${money(s.expected_cash)} · Thực đếm ${money(s.counted_cash)} · Lệch ${money(s.difference)}`:`Ca ${s.id.slice(0,8)} · Đang mở`;return li;}));
