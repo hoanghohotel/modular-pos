@@ -44,7 +44,34 @@ test('real Supabase Auth + PostgREST sales transaction', {timeout:90000}, async(
  const payments=await a.request(`/rest/v1/payments?select=id&order_id=eq.${order.order_id}`);assert.equal(payments.length,1);
  await assert.rejects(rpc('rpc_collect_payment',{...paymentArgs,p_operation_id:randomUUID()}),/ORDER_FINALIZED/);
  await rpc('rpc_refund_payment',{p_payment_id:first.id,p_shift_id:shift.id,p_operation_id:randomUUID(),p_reason:'Local integration refund'});
+ // Offline import is atomic and safe under concurrent retries.
+ const offline={p_operation_id:randomUUID(),p_channel:'TAKEAWAY',p_position_id:null,
+  p_items:[{variant_id:variants[0].id,quantity:2}],p_customer:{},p_expected_total:70000,
+  p_shift_id:shift.id,p_payment_operation_id:randomUUID(),p_received_amount:100000};
+ const [imported,retried]=await Promise.all([rpc('rpc_sync_offline_sale',offline),rpc('rpc_sync_offline_sale',offline)]);
+ assert.equal(imported.order_id,retried.order_id);
+ assert.equal(imported.payment.id,retried.payment.id);
+ assert.equal(imported.operation_id,offline.p_operation_id);
+ assert.equal(imported.status,'PAID');
+ assert.equal((await a.request(`/rest/v1/payments?select=id&order_id=eq.${imported.order_id}`)).length,1);
+ await assert.rejects(rpc('rpc_sync_offline_sale',{...offline,p_expected_total:1}),/IDEMPOTENCY_KEY_REUSED/);
+ await assert.rejects(b.request('/rest/v1/rpc/rpc_sync_offline_sale',{method:'POST',body:{...offline,p_org_id:w.organization_id,p_store_id:w.store_id}}),/PERMISSION_DENIED/);
+ const countOrders=async()=>(await a.request(`/rest/v1/orders?select=id&store_id=eq.${w.store_id}`)).length;
+ const count=await countOrders();
+ const mismatch={...offline,p_operation_id:randomUUID(),p_payment_operation_id:randomUUID(),p_expected_total:1};
+ await assert.rejects(rpc('rpc_sync_offline_sale',mismatch),/OFFLINE_PRICE_CONFLICT/);
+ assert.equal(await countOrders(),count,'Price conflict rolls back the complete order');
+ // Failed attempts leave no idempotency receipt behind: the same ID can succeed
+ // after correcting a request that was never committed.
+ const corrected=await rpc('rpc_sync_offline_sale',{...mismatch,p_expected_total:70000,p_shift_id:null,p_payment_operation_id:null,p_received_amount:null});
+ assert.equal(corrected.status,'OPEN');
+ await rpc('rpc_refund_payment',{p_payment_id:imported.payment.id,p_shift_id:shift.id,p_operation_id:randomUUID(),p_reason:'Offline test cash refund'});
  const closed=await rpc('rpc_close_shift',{p_shift_id:shift.id,p_operation_id:randomUUID(),p_counted_cash:100000});
  assert.equal(Number(closed.expected_cash),100000);assert.equal(Number(closed.difference),0);
+ const replayClosed=await rpc('rpc_sync_offline_sale',offline);
+ assert.equal(replayClosed.order_id,imported.order_id,'Committed replay survives shift closure');
+ const afterClose=await countOrders();
+ await assert.rejects(rpc('rpc_sync_offline_sale',{...offline,p_operation_id:randomUUID(),p_payment_operation_id:randomUUID()}),/OPEN_SHIFT_REQUIRED/);
+ assert.equal(await countOrders(),afterClose,'Closed shift leaves no partial unpaid order');
  await Promise.all([a.signOut(),b.signOut()]);
 });

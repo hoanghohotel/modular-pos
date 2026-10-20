@@ -22,6 +22,12 @@ label{min-width:0}input,select{min-width:0;max-width:100%}#salesPanel{padding:20
 <section id="salesPanel" hidden>
 <h2>Thực đơn & đơn hàng</h2><p id="salesStatus" role="status" aria-live="polite"></p>
 <div class="actions"><button id="reloadOrders" type="button" class="secondary">Tải lại dữ liệu</button><button id="newOrder" type="button" class="secondary">Đơn mới</button></div>
+<details open><summary>Đơn lưu tại máy</summary>
+<p id="outboxSummary" role="status">Chưa có đơn chờ đồng bộ.</p>
+<ul id="outboxList"></ul>
+<div class="actions"><button id="syncOutbox" type="button" class="secondary">Đồng bộ hàng đợi</button><button id="retryOutbox" type="button" class="secondary">Thử lại đơn xung đột</button></div>
+<p><small>Không xóa dữ liệu trình duyệt khi còn đơn chưa đồng bộ. Sau khi tải lại trang cần đăng nhập có mạng để truy cập hàng đợi của đúng tài khoản.</small></p>
+</details>
 <div id="sellingArea">
 <form id="orderForm" class="sale-group"><h3 id="orderTitle">Đơn mới</h3>
 <label>Hình thức<select id="channelChoice"><option value="TAKEAWAY">Mang về</option><option value="DINE_IN">Tại bàn</option><option value="DELIVERY">Giao hàng</option></select></label>
@@ -30,10 +36,14 @@ label{min-width:0}input,select{min-width:0;max-width:100%}#salesPanel{padding:20
 <div id="deliveryFields" hidden><label>Số điện thoại<input id="customerPhone" type="tel" maxlength="20" autocomplete="tel"></label><label>Địa chỉ giao hàng<input id="customerAddress" maxlength="500" autocomplete="street-address"></label></div>
 <label>Món<select id="productChoice"></select></label><label>Size<select id="variantChoice"></select></label><div id="modifierChoices"></div>
 <label>Số lượng<input id="itemQuantity" type="number" min="1" max="999" step="1" value="1"></label><button id="addItem" type="button" class="secondary">Thêm vào đơn</button>
-<ul id="cartItems"></ul><p id="cartTotal">Tạm tính: 0 ₫</p><button id="saveOrder" type="submit">Lưu đơn hàng</button></form>
+<ul id="cartItems"></ul><p id="cartTotal">Tạm tính: 0 ₫</p><button id="saveOrder" type="submit">Lưu đơn hàng</button><button id="queueOrder" type="button" class="secondary">Lưu đơn mới tại máy</button></form>
 </div>
 <div class="sale-group"><h3>Đơn đang mở</h3><small>Hiển thị tối đa 200 đơn cập nhật gần nhất.</small><ul id="openOrders"></ul></div>
 
+<form id="offlineCashForm" class="sale-group" hidden><h3>Nhận tiền mặt cho đơn mới tại máy</h3>
+<label>Tiền khách đã đưa (₫)<input id="offlineReceived" type="number" min="0" max="1000000000000" step="1" required></label>
+<label class="modifier-choice"><input type="checkbox" required> Đã nhận tiền; sẽ đồng bộ khi có mạng</label>
+<button type="submit" class="secondary">Lưu đơn và tiền mặt tại máy</button></form>
 <div id="financeArea" class="sale-group" hidden>
 <h3>Ca & thanh toán</h3><p id="shiftSummary"></p>
 <form id="openShiftForm"><label>Tiền mặt đầu ca (₫)<input id="openingCash" type="number" min="0" max="1000000000" step="1" value="0" required></label><button type="submit">Mở ca của tôi</button></form>

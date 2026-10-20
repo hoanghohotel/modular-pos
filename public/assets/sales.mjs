@@ -1,6 +1,8 @@
+import { OfflineStore } from './offline-store.mjs';
 const el=id=>document.getElementById(id);
 const money=value=>`${Number(value).toLocaleString('vi-VN')} ₫`;
 let api,store,context={},products=[],variants=[],modifiers=[],orders=[],cart=[],editing=null,pending=null,generation=0,dirty=false,currentShift=null,payments=[];
+let outbox=null;
 const status=text=>{el('salesStatus').textContent=text;};
 const rpc=(name,args)=>api.request(`/rest/v1/rpc/${name}`,{method:'POST',body:{p_org_id:store.organization_id,p_store_id:store.id,...args}});
 const rows=(table,select='*',extra='')=>api.request(`/rest/v1/${table}?select=${select}&store_id=eq.${store.id}${extra}`);
@@ -92,7 +94,15 @@ el('orderForm').addEventListener('submit',e=>{
   const payload={p_channel:el('channelChoice').value,p_position_id:el('channelChoice').value==='DINE_IN'?(el('positionChoice').value||null):null,p_items:cart.map(({variant_id,modifier_ids,quantity})=>({variant_id,modifier_ids,quantity})),p_customer:{name:el('customerName').value.trim(),phone:el('customerPhone').value.trim(),address:el('customerAddress').value.trim()},p_order_id:editing?.id||null,p_expected_revision:editing?.revision||null};
   const fingerprint=JSON.stringify(payload);
   if(!pending||pending.fingerprint!==fingerprint)pending={id:crypto.randomUUID(),fingerprint};
-  const result=await rpc('rpc_save_order',{...payload,p_operation_id:pending.id});
+  let result;
+  try {
+    if (!navigator.onLine) throw new TypeError('NETWORK_ERROR');
+    result=await rpc('rpc_save_order',{...payload,p_operation_id:pending.id});
+  } catch(error) {
+    if (!(error instanceof TypeError)) throw error;
+    if (editing) { status('Mất mạng: chưa hỗ trợ sửa đơn server khi offline. Giỏ vẫn được giữ.'); return; }
+    await enqueueLocal(false,pending.id); return;
+  }
   if(current!==generation)return;
   pending=null;reset();await refresh();const order=orders.find(o=>o.id===result.order_id);if(order)await openOrder(order);
   status(`Đã lưu đơn ${result.order_id.slice(0,8)} · Tổng tiền server: ${money(result.total_amount)}. Có thể thu tiền sau khi mở ca.`);
@@ -110,13 +120,16 @@ priceRow('variant');
 window.addEventListener('workspace:ready',async e=>{
  const current=++generation;const detail=e.detail;
  el('salesPanel').hidden=true;context={};currentShift=null;payments=[];financePending.clear();reset();
+ outbox=null;
  if(!detail?.store)return;
  api=detail.client;store=detail.store;
+ outbox=new OfflineStore({url:api.url,userId:api.userId,organizationId:store.organization_id,storeId:store.id});
  await run(async()=>{
   const result=await rpc('rpc_store_context',{});if(current!==generation)return;
   context=result;el('catalogAdmin').hidden=!context.can_manage_catalog;el('sellingArea').hidden=!context.can_sell;
   await refresh();if(current!==generation)return;
-  el('salesPanel').hidden=false;status('Đã tải dữ liệu cửa hàng. Chưa hỗ trợ bán offline.');
+  el('salesPanel').hidden=false;status('Đã tải dữ liệu cửa hàng. Có thể lưu đơn mới vào hàng đợi tại máy khi mất mạng.');
+  await showOutbox();
  });
 });
 
@@ -128,6 +141,7 @@ async function financial(name,args){
  financePending.delete(key);return result;
 }
 function renderFinance(){
+ el('offlineCashForm').hidden=!currentShift||!context.can_collect;
  el('financeArea').hidden=!(context.can_manage_shift||context.can_collect||context.can_void);
  el('openShiftForm').hidden=!context.can_manage_shift||!!currentShift;
  el('closeShiftForm').hidden=!context.can_manage_shift||!currentShift;
@@ -155,6 +169,8 @@ el('openShiftForm').addEventListener('submit',e=>{e.preventDefault();run(async()
  await refreshFinance();status('Đã mở ca.');
 });});
 el('closeShiftForm').addEventListener('submit',e=>{e.preventDefault();if(!currentShift)return;run(async()=>{
+ const queued=outbox?await outbox.list():[];
+ if(queued.some(r=>r.status!=='ACKNOWLEDGED'&&r.payload.p_received_amount!==null)){status('Còn đơn thu tiền tại máy chưa đồng bộ. Cần xử lý trước khi chốt ca.');return;}
  const current=generation;const closed=await financial('rpc_close_shift',{p_shift_id:currentShift.id,p_counted_cash:Number(el('countedCash').value)});if(current!==generation)return;
  await refreshFinance();el('closeShiftForm').reset();status(`Đã chốt ca · Dự kiến ${money(closed.expected_cash)} · Thực đếm ${money(closed.counted_cash)} · Chênh lệch ${money(closed.difference)}.`);
 });});
@@ -174,3 +190,57 @@ el('reportForm').addEventListener('submit',e=>{e.preventDefault();run(async()=>{
  const current=generation;const report=await rpc('rpc_daily_report',{p_date:el('reportDate').value});if(current!==generation)return;
  el('reportSummary').textContent=`${report.date} · ${report.timezone} · ${report.paid_orders} thanh toán · Đã thu ${money(report.gross)} · Hoàn ${money(report.refunds)} · Thu ròng ${money(Number(report.gross)-Number(report.refunds))}`;
 });});
+
+async function enqueueLocal(cash,operationId=crypto.randomUUID()){
+ if(!outbox||!api?.signedIn||!context.can_sell)throw new Error('AUTH_REQUIRED');
+ if(editing){status('Chỉ hỗ trợ đơn mới trong hàng đợi offline.');return;}
+ if(!cart.length){status('Thêm món trước khi lưu tại máy.');return;}
+ const channel=el('channelChoice').value;
+ const position=channel==='DINE_IN'?(el('positionChoice').value||null):null;
+ if(channel==='DINE_IN'&&!position){status('Chọn bàn trước khi lưu.');return;}
+ const customer={name:el('customerName').value.trim(),phone:el('customerPhone').value.trim(),address:el('customerAddress').value.trim()};
+ if(channel==='DELIVERY'&&(customer.phone.length<8||customer.address.length<3)){status('Nhập điện thoại và địa chỉ giao hàng.');return;}
+ const total=cart.reduce((sum,line)=>sum+line.quantity*line.unit,0);
+ const received=cash?Number(el('offlineReceived').value):null;
+ if(cash&&(!currentShift||!context.can_collect||!Number.isSafeInteger(received)||received<total)){status('Cần ca đang mở và nhận đủ tiền mặt.');return;}
+ const queue=outbox,current=generation;
+ await queue.enqueue({p_channel:channel,p_position_id:position,
+  p_items:cart.map(({variant_id,modifier_ids,quantity})=>({variant_id,modifier_ids,quantity})),
+  p_customer:customer,p_expected_total:total,p_shift_id:cash?currentShift.id:null,
+  p_payment_operation_id:cash?crypto.randomUUID():null,p_received_amount:received},operationId);
+ if(current!==generation)return;
+ reset();el('offlineCashForm').reset();await showOutbox();
+ status(cash?'Đã lưu tại máy việc nhận tiền mặt. Chưa xác nhận trên server; cần đồng bộ trước khi chốt ca.':'Đã lưu đơn bền vững tại máy. Đơn đang chờ đồng bộ.');
+}
+async function showOutbox(){
+ const queue=outbox;if(!queue)return;
+ const records=await queue.list();if(queue!==outbox)return;
+ const pending=records.filter(r=>r.status!=='ACKNOWLEDGED');
+ el('outboxSummary').textContent=pending.length+' đơn chưa đồng bộ · '+pending.filter(r=>r.status==='CONFLICT').length+' xung đột';
+ el('outboxList').replaceChildren(...records.slice(-20).reverse().map(record=>{
+  const li=document.createElement('li');
+  li.textContent=record.operationId.slice(0,8)+' · '+money(record.payload.p_expected_total)+' · '+
+   (record.status==='ACKNOWLEDGED'?'Đã đồng bộ':record.status==='CONFLICT'?'Cần xử lý: '+record.error:'Chờ đồng bộ')+
+   (record.payload.p_received_amount!==null?' · Đã ghi nhận nhận tiền mặt tại máy':'');
+  return li;
+ }));
+ el('offlineCashForm').hidden=!currentShift||!context.can_collect;
+}
+async function syncLocal(retryConflicts=false){
+ const queue=outbox,client=api,target=store,actor=api?.userId,current=generation;
+ if(!queue)return;
+ await queue.flush(async(payload,id)=>{
+  if(client.userId!==actor||!client.signedIn)throw new Error('AUTH_REQUIRED');
+  return client.request('/rest/v1/rpc/rpc_sync_offline_sale',{method:'POST',body:{...payload,p_org_id:target.organization_id,p_store_id:target.id,p_operation_id:id}});
+ },{retryConflicts});
+ if(current!==generation)return;
+ await showOutbox();
+ const remaining=(await queue.list()).filter(r=>r.status!=='ACKNOWLEDGED');
+ if(!remaining.length){await refresh();status('Đã đồng bộ toàn bộ hàng đợi.');}
+ else status('Hàng đợi vẫn giữ trên máy. Xung đột giá, bàn, ca hoặc quyền cần được kiểm tra; không tự đổi dữ liệu đã ghi nhận.');
+}
+el('queueOrder').addEventListener('click',()=>run(()=>enqueueLocal(false)));
+el('offlineCashForm').addEventListener('submit',e=>{e.preventDefault();run(()=>enqueueLocal(true));});
+el('syncOutbox').addEventListener('click',()=>run(()=>syncLocal()));
+el('retryOutbox').addEventListener('click',()=>run(()=>syncLocal(true)));
+window.addEventListener('online',()=>{if(api?.signedIn&&outbox)run(()=>syncLocal());});
