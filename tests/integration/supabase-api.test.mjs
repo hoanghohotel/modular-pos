@@ -57,12 +57,24 @@ test('real Supabase Auth + PostgREST sales transaction', {timeout:90000}, async(
  await assert.rejects(rpc('rpc_sync_offline_sale',{...offline,p_expected_total:1}),/IDEMPOTENCY_KEY_REUSED/);
  await assert.rejects(b.request('/rest/v1/rpc/rpc_sync_offline_sale',{method:'POST',body:{...offline,p_org_id:w.organization_id,p_store_id:w.store_id}}),/PERMISSION_DENIED/);
  const countOrders=async()=>(await a.request(`/rest/v1/orders?select=id&store_id=eq.${w.store_id}`)).length;
+ // Simulate a committed online save whose response was lost: importing the
+ // same intent must acknowledge the existing order instead of creating another.
+ const lost={...offline,p_operation_id:randomUUID(),p_shift_id:null,p_payment_operation_id:null,p_received_amount:null};
+ const committed=await rpc('rpc_save_order',{p_operation_id:lost.p_operation_id,p_channel:lost.p_channel,p_position_id:null,p_items:lost.p_items,p_customer:lost.p_customer,p_order_id:null,p_expected_revision:null});
+ const beforeRecovery=await countOrders();
+ const recovered=await rpc('rpc_sync_offline_sale',lost);
+ assert.equal(recovered.order_id,committed.order_id);
+ assert.equal(await countOrders(),beforeRecovery);
  const count=await countOrders();
  const mismatch={...offline,p_operation_id:randomUUID(),p_payment_operation_id:randomUUID(),p_expected_total:1};
  await assert.rejects(rpc('rpc_sync_offline_sale',mismatch),/OFFLINE_PRICE_CONFLICT/);
  assert.equal(await countOrders(),count,'Price conflict rolls back the complete order');
  // Failed attempts leave no idempotency receipt behind: the same ID can succeed
  // after correcting a request that was never committed.
+ await rpc('rpc_update_variant',{p_variant_id:variants[0].id,p_price:40000,p_active:true});
+ await assert.rejects(rpc('rpc_sync_offline_sale',{...offline,p_operation_id:randomUUID(),p_payment_operation_id:randomUUID()}),/OFFLINE_PRICE_CONFLICT/);
+ assert.equal(await countOrders(),count,'Changed catalog price leaves no partial order');
+ await rpc('rpc_update_variant',{p_variant_id:variants[0].id,p_price:35000,p_active:true});
  const corrected=await rpc('rpc_sync_offline_sale',{...mismatch,p_expected_total:70000,p_shift_id:null,p_payment_operation_id:null,p_received_amount:null});
  assert.equal(corrected.status,'OPEN');
  await rpc('rpc_refund_payment',{p_payment_id:imported.payment.id,p_shift_id:shift.id,p_operation_id:randomUUID(),p_reason:'Offline test cash refund'});
