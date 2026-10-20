@@ -1,10 +1,12 @@
 {
   "name": "modular-pos-monorepo",
-  "version": "2.0.0-production",
+  "version": "2.1.0-vercel-production",
   "private": true,
   "type": "module",
   "description": "Hệ thống POS đa ngành, đa chi nhánh, kiến trúc Offline-first (PostgreSQL/Supabase + Next.js Web Admin/POS + Flutter POS)",
   "scripts": {
+    "build": "node scripts/build-vercel.mjs",
+    "start": "node -e \"console.log('Use Vercel static serving from public/index.html')\"",
     "test": "node --test packages/domain-specs/test/*.test.mjs",
     "db:reset": "supabase db reset",
     "db:test": "supabase test db"
