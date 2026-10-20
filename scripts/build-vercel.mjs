@@ -21,6 +21,7 @@ if (fs.existsSync(rootIndex)) {
 const healthPayload = JSON.stringify({
   status: 'HEALTHY',
   app: 'modular-pos-monorepo',
+  version: '2.2.0-admin-auth',
   phasesCompleted: 9,
   vercelReady: true,
   builtAt: new Date().toISOString()

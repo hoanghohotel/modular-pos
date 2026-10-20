@@ -8,6 +8,10 @@
   "cleanUrls": true,
   "rewrites": [
     {
+      "source": "/login",
+      "destination": "/index.html"
+    },
+    {
       "source": "/pos",
       "destination": "/index.html"
     },

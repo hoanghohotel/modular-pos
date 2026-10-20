@@ -3,7 +3,7 @@
 <head>
   <meta charset="UTF-8" />
   <meta name="viewport" content="width=device-width, initial-scale=1.0" />
-  <title>Modular POS Cloud — Hệ thống Bán hàng POS, KDS, Kho BOM & Quản trị Đa Chi nhánh</title>
+  <title>Modular POS Cloud — Đăng nhập Admin, Web POS, KDS, Kho BOM & Quản trị Đa Chi nhánh</title>
   <script src="https://cdn.tailwindcss.com/3.4.17"></script>
   <link rel="preconnect" href="https://fonts.googleapis.com" />
   <link rel="preconnect" href="https://fonts.gstatic.com" crossorigin />
@@ -29,7 +29,9 @@
               CN-DN-01 (Đà Nẵng)
             </span>
           </div>
-          <p class="text-xs text-slate-400">Giai đoạn 1–9 Production • Ca: <span class="text-slate-200 font-medium">SHIFT-DN-261020-01</span></p>
+          <p class="text-xs text-slate-400">
+            Tài khoản: <strong id="currentUserBadge" class="text-emerald-300">Nguyễn Văn Chủ Sở Hữu (OWNER)</strong>
+          </p>
         </div>
       </div>
 
@@ -38,22 +40,28 @@
         <button id="navBtnPos" type="button" class="px-3 py-1.5 rounded-lg text-xs font-semibold bg-emerald-600 text-white shrink-0">
           🛒 Bán hàng POS
         </button>
+        <button id="navBtnAdmin" type="button" class="px-3 py-1.5 rounded-lg text-xs font-semibold bg-slate-800 text-slate-300 hover:bg-slate-700 shrink-0">
+          ⚙️ Quản trị Admin
+        </button>
         <button id="navBtnKds" type="button" class="px-3 py-1.5 rounded-lg text-xs font-semibold bg-slate-800 text-slate-300 hover:bg-slate-700 shrink-0">
           👨‍🍳 Bếp &amp; Bar KDS (<span id="kdsCountBadge">2</span>)
         </button>
         <button id="navBtnInv" type="button" class="px-3 py-1.5 rounded-lg text-xs font-semibold bg-slate-800 text-slate-300 hover:bg-slate-700 shrink-0">
-          📦 Kho &amp; Công thức BOM
+          📦 Kho &amp; BOM
         </button>
         <button id="navBtnSync" type="button" class="px-3 py-1.5 rounded-lg text-xs font-semibold bg-slate-800 text-slate-300 hover:bg-slate-700 shrink-0">
-          📡 Outbox &amp; Quản trị SaaS (<span id="outboxCountBadge">0</span>)
+          📡 Outbox &amp; SaaS (<span id="outboxCountBadge">0</span>)
         </button>
       </nav>
 
-      <!-- Online / Offline Toggle Banner -->
+      <!-- Login / Account Switcher & Online/Offline Toggle -->
       <div class="flex items-center gap-2">
+        <button id="openLoginModalBtn" type="button" class="px-3 py-1.5 rounded-xl text-xs font-semibold bg-indigo-600 hover:bg-indigo-500 text-white transition">
+          🔐 Đăng nhập / Đổi quyền
+        </button>
         <button id="toggleNetworkBtn" type="button" class="inline-flex items-center gap-2 px-3 py-1.5 rounded-full text-xs font-semibold bg-emerald-500/15 text-emerald-300 border border-emerald-500/30">
           <span id="networkDot" class="w-2 h-2 rounded-full bg-emerald-400"></span>
-          <span id="networkLabel">Online • Đã đồng bộ</span>
+          <span id="networkLabel">Online</span>
         </button>
       </div>
     </div>
@@ -68,9 +76,7 @@
   <main class="max-w-7xl w-full mx-auto px-3 sm:px-6 py-4 flex-1">
     <!-- TAB 1: POS TERMINAL -->
     <section id="tabPos" class="grid grid-cols-1 lg:grid-cols-12 gap-4">
-      <!-- Left 7 cols: Channel & Positions + Menu -->
       <div class="lg:col-span-7 space-y-4">
-        <!-- Channel Switcher -->
         <div class="rounded-2xl bg-slate-900 border border-slate-800 p-3.5 space-y-3">
           <div class="flex flex-wrap items-center justify-between gap-2">
             <div class="flex items-center gap-1.5">
@@ -86,12 +92,9 @@
             </div>
             <span id="activePosLabel" class="text-xs font-semibold text-emerald-400">Đang chọn: Bàn 01 (TB-01)</span>
           </div>
-
-          <!-- Position Grid -->
           <div id="positionsGrid" class="grid grid-cols-4 sm:grid-cols-5 gap-2 max-h-44 overflow-y-auto thin-scroll p-0.5"></div>
         </div>
 
-        <!-- Product Catalog -->
         <div class="rounded-2xl bg-slate-900 border border-slate-800 p-3.5 space-y-3">
           <div class="flex items-center justify-between gap-2">
             <h2 class="text-xs sm:text-sm font-bold text-white">Thực đơn Đa ngành (F&amp;B • Bán lẻ Barcode • Combo • Dịch vụ)</h2>
@@ -101,7 +104,6 @@
         </div>
       </div>
 
-      <!-- Right 5 cols: Order Cart & Actions -->
       <div class="lg:col-span-5 rounded-2xl bg-slate-900 border border-slate-800 p-4 flex flex-col justify-between space-y-4">
         <div class="space-y-3">
           <div class="flex items-center justify-between border-b border-slate-800 pb-3">
@@ -114,7 +116,6 @@
             </button>
           </div>
 
-          <!-- Delivery Payment Setting (Shown when channel === DELIVERY) -->
           <div id="deliveryPaymentBox" class="hidden rounded-xl bg-slate-950 border border-slate-800 p-3 space-y-2">
             <label for="deliveryPayMethodSelect" class="block text-xs font-semibold text-amber-300">
               Phương thức thanh toán Đơn Giao Hàng (Từ Cài đặt):
@@ -126,11 +127,9 @@
             </select>
           </div>
 
-          <!-- Cart Items List -->
           <div id="cartItemsList" class="space-y-2 max-h-64 overflow-y-auto thin-scroll"></div>
         </div>
 
-        <!-- Totals & Checkout Buttons -->
         <div class="border-t border-slate-800 pt-3 space-y-3">
           <div class="space-y-1 text-xs">
             <div class="flex justify-between text-slate-400">
@@ -159,7 +158,93 @@
       </div>
     </section>
 
-    <!-- TAB 2: KDS KITCHEN & BAR DISPLAY -->
+    <!-- TAB 2: WEB ADMIN PORTAL -->
+    <section id="tabAdmin" class="hidden space-y-4">
+      <div class="rounded-2xl bg-slate-900 border border-slate-800 p-4 flex flex-wrap items-center justify-between gap-3">
+        <div>
+          <h2 class="text-sm sm:text-base font-bold text-white">Cổng Quản Trị Hệ Thống Web Admin (Giai đoạn 2 &amp; 3)</h2>
+          <p class="text-xs text-slate-400">Quản lý Thực đơn, Sơ đồ Bàn, Tài khoản Ngân hàng VietQR, Phân quyền RBAC &amp; Module Registry (Yêu cầu quyền OWNER / STORE_MANAGER)</p>
+        </div>
+        <span id="adminRoleGuardBadge" class="px-3 py-1 rounded-full text-xs font-semibold bg-emerald-500/20 text-emerald-300 border border-emerald-500/30">
+          ✔ Đang có quyền Quản trị (OWNER)
+        </span>
+      </div>
+
+      <div class="grid grid-cols-1 md:grid-cols-3 gap-4">
+        <!-- Card 1: Add New Product to Catalog -->
+        <div class="rounded-2xl bg-slate-900 border border-slate-800 p-4 space-y-3">
+          <h3 class="text-xs sm:text-sm font-bold text-emerald-400">1. Thêm Sản phẩm Mới vào Menu</h3>
+          <div class="space-y-2 text-xs">
+            <div>
+              <label for="admProdSku" class="block text-slate-400 mb-1">Mã SKU:</label>
+              <input id="admProdSku" type="text" value="DRK-MATCHA-LATTE" class="w-full rounded-lg bg-slate-950 border border-slate-700 px-3 py-2 text-white" />
+            </div>
+            <div>
+              <label for="admProdName" class="block text-slate-400 mb-1">Tên món / Sản phẩm:</label>
+              <input id="admProdName" type="text" value="Matcha Latte Uji Nhật Bản" class="w-full rounded-lg bg-slate-950 border border-slate-700 px-3 py-2 text-white" />
+            </div>
+            <div>
+              <label for="admProdPrice" class="block text-slate-400 mb-1">Giá bán (VND):</label>
+              <input id="admProdPrice" type="number" value="49000" class="w-full rounded-lg bg-slate-950 border border-slate-700 px-3 py-2 text-white" />
+            </div>
+            <button id="admAddProductBtn" type="button" class="w-full py-2.5 rounded-xl bg-emerald-600 hover:bg-emerald-500 text-white font-bold">
+              + Thêm vào Menu POS Ngay
+            </button>
+          </div>
+        </div>
+
+        <!-- Card 2: Configure Dynamic VietQR Bank Account -->
+        <div class="rounded-2xl bg-slate-900 border border-slate-800 p-4 space-y-3">
+          <h3 class="text-xs sm:text-sm font-bold text-amber-400">2. Cấu hình Tài khoản Ngân hàng VietQR</h3>
+          <div class="space-y-2 text-xs">
+            <div>
+              <label for="admBankBin" class="block text-slate-400 mb-1">Ngân hàng (Mã BIN Napas):</label>
+              <select id="admBankBin" class="w-full rounded-lg bg-slate-950 border border-slate-700 px-3 py-2 text-white">
+                <option value="970436" selected>Vietcombank (970436)</option>
+                <option value="970415">VietinBank (970415)</option>
+                <option value="970418">BIDV (970418)</option>
+                <option value="970422">MB Bank (970422)</option>
+                <option value="970407">Techcombank (970407)</option>
+                <option value="970416">ACB (970416)</option>
+              </select>
+            </div>
+            <div>
+              <label for="admBankAcc" class="block text-slate-400 mb-1">Số tài khoản nhận tiền:</label>
+              <input id="admBankAcc" type="text" value="0041000999888" class="w-full rounded-lg bg-slate-950 border border-slate-700 px-3 py-2 text-white" />
+            </div>
+            <div>
+              <label for="admBankOwner" class="block text-slate-400 mb-1">Tên chủ tài khoản:</label>
+              <input id="admBankOwner" type="text" value="CONG TY TNHH MODULAR VN" class="w-full rounded-lg bg-slate-950 border border-slate-700 px-3 py-2 text-white" />
+            </div>
+            <button id="admSaveBankBtn" type="button" class="w-full py-2.5 rounded-xl bg-amber-600 hover:bg-amber-500 text-white font-bold">
+              💾 Lưu Cấu hình VietQR Động
+            </button>
+          </div>
+        </div>
+
+        <!-- Card 3: Table & Device Approval Management -->
+        <div class="rounded-2xl bg-slate-900 border border-slate-800 p-4 space-y-3">
+          <h3 class="text-xs sm:text-sm font-bold text-indigo-400">3. Quản lý Sơ đồ Bàn &amp; Thiết bị POS</h3>
+          <div class="space-y-2 text-xs">
+            <p class="text-slate-400">Hiện có <strong id="admTableCountText" class="text-white">20</strong> bàn tại chỗ, 10 ô Mang về, 10 ô Giao hàng.</p>
+            <button id="admAddTableBtn" type="button" class="w-full py-2 rounded-xl bg-slate-800 hover:bg-slate-700 text-white font-semibold border border-slate-700">
+              + Thêm Bàn Tại Chỗ Mới (TB-21...)
+            </button>
+            <div class="p-3 rounded-xl bg-slate-950 border border-slate-800 space-y-2">
+              <div class="flex items-center justify-between">
+                <span class="font-mono text-white">POS-DN-UNAUTH (Android)</span>
+                <span id="admDeviceStatusBadge" class="px-2 py-0.5 rounded bg-rose-950 text-rose-300 font-semibold">Chưa duyệt</span>
+              </div>
+              <button id="admApproveDeviceBtn" type="button" class="w-full py-1.5 rounded-lg bg-indigo-600 hover:bg-indigo-500 text-white font-semibold">
+                ✔ Phê duyệt Thiết bị POS (ADR-09)
+              </button>
+            </div>
+          </div>
+        </div>
+      </div>
+    </section>
+
+    <!-- TAB 3: KDS KITCHEN & BAR DISPLAY -->
     <section id="tabKds" class="hidden space-y-4">
       <div class="rounded-2xl bg-slate-900 border border-slate-800 p-4 flex flex-wrap items-center justify-between gap-3">
         <div>
@@ -170,7 +255,7 @@
       <div id="kdsTicketsGrid" class="grid grid-cols-1 md:grid-cols-3 gap-4"></div>
     </section>
 
-    <!-- TAB 3: INVENTORY, BOM RECIPES & MOVING AVERAGE COST -->
+    <!-- TAB 4: INVENTORY, BOM RECIPES & MOVING AVERAGE COST -->
     <section id="tabInv" class="hidden space-y-4">
       <div class="rounded-2xl bg-slate-900 border border-slate-800 p-4 flex flex-wrap items-center justify-between gap-3">
         <div>
@@ -198,7 +283,7 @@
       </div>
     </section>
 
-    <!-- TAB 4: OFFLINE OUTBOX & SAAS MULTI-TENANT ADMIN -->
+    <!-- TAB 5: OFFLINE OUTBOX & SAAS MULTI-TENANT ADMIN -->
     <section id="tabSync" class="hidden space-y-4">
       <div class="grid grid-cols-1 md:grid-cols-2 gap-4">
         <div class="rounded-2xl bg-slate-900 border border-slate-800 p-4 space-y-3">
@@ -236,7 +321,67 @@
     </section>
   </main>
 
-  <!-- MODAL: PROVISIONAL BILL WITH DYNAMIC VIETQR -->
+  <!-- MODAL 1: ADMIN & STAFF LOGIN / ROLE SWITCHER -->
+  <div id="loginModal" class="hidden fixed inset-0 z-50 bg-slate-950/85 backdrop-blur-sm flex items-center justify-center p-4">
+    <div class="bg-slate-900 border border-slate-700 text-slate-100 rounded-2xl max-w-md w-full p-5 shadow-2xl space-y-4">
+      <div class="flex items-center justify-between border-b border-slate-800 pb-3">
+        <div>
+          <h3 class="text-base font-bold text-white">🔐 Đăng nhập Hệ thống / Chuyển Vai trò RBAC</h3>
+          <p class="text-xs text-slate-400">Tài khoản mặc định đã khởi tạo sẵn trong <code class="text-emerald-300">supabase/seed.sql</code></p>
+        </div>
+        <button id="closeLoginModalBtn" type="button" class="px-2.5 py-1 rounded-lg bg-slate-800 text-xs text-slate-300 hover:bg-slate-700">
+          Đóng
+        </button>
+      </div>
+
+      <!-- Quick 1-Tap Seed Accounts -->
+      <div class="space-y-2">
+        <p class="text-xs font-semibold text-emerald-400">Chạm chọn nhanh tài khoản mẫu (1-Chạm):</p>
+        <div class="space-y-1.5 text-xs">
+          <button type="button" data-email="owner@modularpos.vn" data-role="OWNER" data-name="Nguyễn Văn Chủ Sở Hữu" data-store="CN-DN-01 (Toàn chuỗi)" class="quick-login-btn w-full p-2.5 rounded-xl bg-slate-950 hover:bg-emerald-950/50 border border-emerald-500/40 text-left flex items-center justify-between">
+            <div>
+              <div class="font-bold text-white">👑 owner@modularpos.vn</div>
+              <div class="text-slate-400">Mật khẩu / PIN: <code class="text-emerald-300">admin123</code> • Scope: ORG_WIDE</div>
+            </div>
+            <span class="px-2 py-0.5 rounded bg-emerald-500/20 text-emerald-300 font-bold">OWNER</span>
+          </button>
+
+          <button type="button" data-email="manager.dn@modularpos.vn" data-role="STORE_MANAGER" data-name="Trần Thị Quản Lý Đà Nẵng" data-store="CN-DN-01 (Đà Nẵng)" class="quick-login-btn w-full p-2.5 rounded-xl bg-slate-950 hover:bg-slate-800 border border-slate-800 text-left flex items-center justify-between">
+            <div>
+              <div class="font-bold text-white">🛡️ manager.dn@modularpos.vn</div>
+              <div class="text-slate-400">Mật khẩu / PIN: <code class="text-amber-300">123456</code> • Chi nhánh Đà Nẵng</div>
+            </div>
+            <span class="px-2 py-0.5 rounded bg-amber-500/20 text-amber-300 font-bold">MANAGER</span>
+          </button>
+
+          <button type="button" data-email="cashier.dn@modularpos.vn" data-role="CASHIER" data-name="Lê Văn Thu Ngân Đà Nẵng" data-store="CN-DN-01 (Đà Nẵng)" class="quick-login-btn w-full p-2.5 rounded-xl bg-slate-950 hover:bg-slate-800 border border-slate-800 text-left flex items-center justify-between">
+            <div>
+              <div class="font-bold text-white">🧑‍💻 cashier.dn@modularpos.vn</div>
+              <div class="text-slate-400">Mật khẩu / PIN: <code class="text-sky-300">123456</code> • Chỉ bán hàng &amp; thu tiền</div>
+            </div>
+            <span class="px-2 py-0.5 rounded bg-sky-500/20 text-sky-300 font-bold">CASHIER</span>
+          </button>
+        </div>
+      </div>
+
+      <!-- Manual Email & Password Form -->
+      <div class="border-t border-slate-800 pt-3 space-y-2.5 text-xs">
+        <div>
+          <label for="loginEmailInput" class="block text-slate-300 font-medium mb-1">Email đăng nhập:</label>
+          <input id="loginEmailInput" type="email" value="owner@modularpos.vn" class="w-full rounded-xl bg-slate-950 border border-slate-700 px-3 py-2 text-white" />
+        </div>
+        <div>
+          <label for="loginPassInput" class="block text-slate-300 font-medium mb-1">Mật khẩu / Mã PIN:</label>
+          <input id="loginPassInput" type="password" value="admin123" class="w-full rounded-xl bg-slate-950 border border-slate-700 px-3 py-2 text-white" />
+        </div>
+        <button id="submitManualLoginBtn" type="button" class="w-full py-2.5 rounded-xl bg-emerald-600 hover:bg-emerald-500 text-white font-bold">
+          Đăng nhập Ngay
+        </button>
+      </div>
+    </div>
+  </div>
+
+  <!-- MODAL 2: PROVISIONAL BILL WITH DYNAMIC VIETQR -->
   <div id="provisionalModal" class="hidden fixed inset-0 z-50 bg-slate-950/80 backdrop-blur-sm flex items-center justify-center p-4">
     <div class="bg-white text-slate-900 rounded-2xl max-w-sm w-full p-5 shadow-2xl space-y-3">
       <div class="text-center border-b border-dashed border-slate-300 pb-3">
@@ -276,6 +421,16 @@
     ];
 
     const state = {
+      currentUser: {
+        email: 'owner@modularpos.vn',
+        name: 'Nguyễn Văn Chủ Sở Hữu',
+        role: 'OWNER'
+      },
+      bankConfig: {
+        bankBin: '970436',
+        accountNo: '0041000999888',
+        accountName: 'CONG TY TNHH MODULAR VN'
+      },
       isOnline: true,
       channel: 'DINE_IN',
       selectedPosCode: 'TB-01',
@@ -350,6 +505,7 @@
       document.getElementById('activePosLabel').textContent = `Đang chọn: ${state.selectedPosCode}`;
       document.getElementById('cartHeaderTitle').textContent = `Giỏ hàng — ${state.selectedPosCode} (${state.channel})`;
       document.getElementById('deliveryPaymentBox').classList.toggle('hidden', state.channel !== 'DELIVERY');
+      document.getElementById('admTableCountText').textContent = String(state.positions.DINE_IN.length);
     }
 
     function renderProducts() {
@@ -494,7 +650,20 @@
       });
     }
 
+    function renderUserHeader() {
+      document.getElementById('currentUserBadge').textContent = `${state.currentUser.name} (${state.currentUser.role})`;
+      const guard = document.getElementById('adminRoleGuardBadge');
+      if (state.currentUser.role === 'CASHIER') {
+        guard.textContent = '⚠ Tài khoản Thu ngân (CASHIER) — Chế độ Chỉ xem trong Admin';
+        guard.className = 'px-3 py-1 rounded-full text-xs font-semibold bg-amber-500/20 text-amber-300 border border-amber-500/30';
+      } else {
+        guard.textContent = `✔ Đang có quyền Quản trị (${state.currentUser.role})`;
+        guard.className = 'px-3 py-1 rounded-full text-xs font-semibold bg-emerald-500/20 text-emerald-300 border border-emerald-500/30';
+      }
+    }
+
     function renderAll() {
+      renderUserHeader();
       renderPositions();
       renderProducts();
       renderCart();
@@ -509,6 +678,7 @@
       // Navigation tabs
       const tabs = [
         { btn: 'navBtnPos', sec: 'tabPos' },
+        { btn: 'navBtnAdmin', sec: 'tabAdmin' },
         { btn: 'navBtnKds', sec: 'tabKds' },
         { btn: 'navBtnInv', sec: 'tabInv' },
         { btn: 'navBtnSync', sec: 'tabSync' }
@@ -522,6 +692,99 @@
               : 'px-3 py-1.5 rounded-lg text-xs font-semibold bg-slate-800 text-slate-300 hover:bg-slate-700 shrink-0';
           });
         });
+      });
+
+      // Login Modal handlers
+      document.getElementById('openLoginModalBtn').addEventListener('click', () => {
+        document.getElementById('loginModal').classList.remove('hidden');
+      });
+      document.getElementById('closeLoginModalBtn').addEventListener('click', () => {
+        document.getElementById('loginModal').classList.add('hidden');
+      });
+
+      document.querySelectorAll('.quick-login-btn').forEach(btn => {
+        btn.addEventListener('click', () => {
+          const email = btn.getAttribute('data-email');
+          const role = btn.getAttribute('data-role');
+          const name = btn.getAttribute('data-name');
+          const store = btn.getAttribute('data-store');
+          state.currentUser = { email, role, name };
+          document.getElementById('storeSelectorBadge').textContent = store;
+          document.getElementById('loginEmailInput').value = email;
+          document.getElementById('loginModal').classList.add('hidden');
+          renderAll();
+          showAppToast(`Đã đăng nhập với tài khoản: ${name} (${role})`);
+        });
+      });
+
+      document.getElementById('submitManualLoginBtn').addEventListener('click', () => {
+        const email = document.getElementById('loginEmailInput').value.trim().toLowerCase();
+        if (email.includes('manager')) {
+          state.currentUser = { email, name: 'Trần Thị Quản Lý Đà Nẵng', role: 'STORE_MANAGER' };
+        } else if (email.includes('cashier')) {
+          state.currentUser = { email, name: 'Lê Văn Thu Ngân Đà Nẵng', role: 'CASHIER' };
+        } else {
+          state.currentUser = { email: email || 'owner@modularpos.vn', name: 'Nguyễn Văn Chủ Sở Hữu', role: 'OWNER' };
+        }
+        document.getElementById('loginModal').classList.add('hidden');
+        renderAll();
+        showAppToast(`Đăng nhập thành công: ${state.currentUser.name} (${state.currentUser.role})`);
+      });
+
+      // Admin Portal Actions
+      document.getElementById('admAddProductBtn').addEventListener('click', () => {
+        if (state.currentUser.role === 'CASHIER') {
+          showAppToast('Chặn bởi RBAC: Thu ngân không có quyền catalog.manage! Hãy đăng nhập OWNER hoặc MANAGER.', 'warn');
+          return;
+        }
+        const sku = document.getElementById('admProdSku').value.trim() || 'DRK-NEW';
+        const name = document.getElementById('admProdName').value.trim() || 'Món mới';
+        const price = Number(document.getElementById('admProdPrice').value) || 45000;
+        PRODUCTS.push({
+          id: 'p-' + Date.now(),
+          sku,
+          name,
+          price,
+          category: 'Món Mới Admin',
+          station: 'BAR_STATION',
+          bom: []
+        });
+        renderProducts();
+        showAppToast(`Đã thêm món "${name}" (${formatVnd(price)}) vào thực đơn POS!`);
+      });
+
+      document.getElementById('admSaveBankBtn').addEventListener('click', () => {
+        if (state.currentUser.role === 'CASHIER') {
+          showAppToast('Chặn bởi RBAC: Thu ngân không có quyền store.config.manage!', 'warn');
+          return;
+        }
+        state.bankConfig.bankBin = document.getElementById('admBankBin').value;
+        state.bankConfig.accountNo = document.getElementById('admBankAcc').value.trim() || '0041000999888';
+        state.bankConfig.accountName = document.getElementById('admBankOwner').value.trim() || 'MODULAR POS STORE';
+        showAppToast(`Đã cập nhật tài khoản VietQR động (${state.bankConfig.accountNo}) cho Phiếu Tạm Tính!`);
+      });
+
+      document.getElementById('admAddTableBtn').addEventListener('click', () => {
+        if (state.currentUser.role === 'CASHIER') {
+          showAppToast('Chặn bởi RBAC: Thu ngân không có quyền thêm bàn mới!', 'warn');
+          return;
+        }
+        const nextNum = state.positions.DINE_IN.length + 1;
+        const code = `TB-${String(nextNum).padStart(2, '0')}`;
+        state.positions.DINE_IN.push({ code, name: `Bàn ${String(nextNum).padStart(2, '0')}`, status: 'AVAILABLE' });
+        renderPositions();
+        showAppToast(`Đã khởi tạo thêm ${code} vào sơ đồ phục vụ tại chỗ!`);
+      });
+
+      document.getElementById('admApproveDeviceBtn').addEventListener('click', () => {
+        if (state.currentUser.role === 'CASHIER') {
+          showAppToast('Chặn bởi RBAC: Thu ngân không có quyền device.manage!', 'warn');
+          return;
+        }
+        const badge = document.getElementById('admDeviceStatusBadge');
+        badge.textContent = 'Đã duyệt (ACTIVE)';
+        badge.className = 'px-2 py-0.5 rounded bg-emerald-950 text-emerald-300 font-semibold';
+        showAppToast('Đã phê duyệt thiết bị POS-DN-UNAUTH (is_authorized = TRUE) và ghi Audit Log!');
       });
 
       // Channel switchers
@@ -550,11 +813,11 @@
         const lbl = document.getElementById('networkLabel');
         if (state.isOnline) {
           dot.className = 'w-2 h-2 rounded-full bg-emerald-400';
-          lbl.textContent = 'Online • Đã đồng bộ';
+          lbl.textContent = 'Online';
           showAppToast('Đã kết nối mạng trở lại! Sẵn sàng đồng bộ sync_outbox.');
         } else {
           dot.className = 'w-2 h-2 rounded-full bg-amber-400';
-          lbl.textContent = 'Offline • Đang lưu cục bộ';
+          lbl.textContent = 'Offline';
           showAppToast('Đang ở chế độ Offline-First: Đơn hàng mới sẽ ghi vào sync_outbox cục bộ.', 'warn');
         }
       });
@@ -578,8 +841,8 @@
         itemsBox.innerHTML = cart.map(i => `<div class="flex justify-between"><span>${i.name} x${i.qty}</span><span class="font-semibold">${formatVnd(i.price * i.qty)}</span></div>`).join('');
         document.getElementById('provTotalAmount').textContent = formatVnd(total);
         const memo = `TT ${orderNo}`;
-        document.getElementById('provQrMemo').textContent = `Nội dung CK: ${memo}`;
-        document.getElementById('provQrImage').src = `https://img.vietqr.io/image/970436-0041000999888-compact2.png?amount=${total}&addInfo=${encodeURIComponent(memo)}&accountName=MODULAR%20POS%20STORE`;
+        document.getElementById('provQrMemo').textContent = `Nội dung CK: ${memo} • TK: ${state.bankConfig.accountNo}`;
+        document.getElementById('provQrImage').src = `https://img.vietqr.io/image/${state.bankConfig.bankBin}-${state.bankConfig.accountNo}-compact2.png?amount=${total}&addInfo=${encodeURIComponent(memo)}&accountName=${encodeURIComponent(state.bankConfig.accountName)}`;
         document.getElementById('provisionalModal').classList.remove('hidden');
       });
 
@@ -598,7 +861,6 @@
         const orderNo = `DN01-POS1-261020-${String(state.orderSeq).padStart(4, '0')}`;
         state.orderSeq += 1;
 
-        // Deduct BOM inventory
         cart.forEach(item => {
           const prod = PRODUCTS.find(p => p.id === item.productId);
           if (prod && prod.bom) {
@@ -629,7 +891,6 @@
         showAppToast(`Đã hoàn tất đơn ${orderNo} (${formatVnd(total)}), giải phóng ${state.selectedPosCode} và trừ kho định lượng BOM!`);
       });
 
-      // Simulate GRN Moving Average Cost
       document.getElementById('simulateGrnBtn').addEventListener('click', () => {
         const cf = state.inventory.find(x => x.sku === 'MAT-COFFEE-BEAN');
         if (cf) {
@@ -651,6 +912,10 @@
       });
 
       document.getElementById('upgradeEnterpriseBtn').addEventListener('click', () => {
+        if (state.currentUser.role !== 'OWNER') {
+          showAppToast('Chặn bởi RBAC: Chỉ Chủ sở hữu (OWNER) mới được nâng cấp gói thuê bao SaaS!', 'warn');
+          return;
+        }
         document.getElementById('currentPlanBadge').textContent = 'ENTERPRISE (Không giới hạn Chi nhánh & Thiết bị)';
         showAppToast('Đã nâng cấp gói thuê bao lên ENTERPRISE và phát hành hóa đơn bất biến!');
       });
