@@ -189,6 +189,7 @@ BEGIN
       VALUES(p_org_id,p_store_id,order_id,variant.id,variant.product_name,variant.name,qty,unit_price,options,qty::bigint*unit_price);
     total:=total+qty::bigint*unit_price;
   END LOOP;
+  IF total>1000000000000 THEN RAISE EXCEPTION 'ORDER_TOTAL_TOO_LARGE' USING ERRCODE='22023'; END IF;
   UPDATE public.orders SET total_amount=total WHERE id=order_id RETURNING jsonb_build_object('order_id',id,'revision',revision,'total_amount',total_amount,'status',order_status) INTO result;
   INSERT INTO public.order_requests(organization_id,store_id,operation_id,actor_id,request_payload,response_payload) VALUES(p_org_id,p_store_id,p_operation_id,auth.uid(),req,result);
   INSERT INTO public.audit_logs(organization_id,store_id,actor_user_id,module_key,action_key,entity_type,entity_id,before_state,after_state)

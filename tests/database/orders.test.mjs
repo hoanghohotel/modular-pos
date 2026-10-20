@@ -91,5 +91,74 @@ test('online orders use persisted catalog, tenant authorization and idempotency'
    assert.equal(context.can_sell,false);assert.equal(context.can_manage_catalog,false);
    await assert.rejects(save(),/PERMISSION_DENIED/);
   });
+
+  await actor(uid);
+  await db.query('SELECT public.rpc_update_variant($1,$2,$3,$4,$5)',[a.organization_id,a.store_id,variants[0].id,35000,true]);
+  let shift,payment,paidOrder;
+  const pay=(order,shiftId,operation=randomUUID(),method='CASH',received=100000,confirmed=false)=>db.query('SELECT public.rpc_collect_payment($1,$2,$3,$4,$5,$6,$7,$8,$9) AS data',[a.organization_id,a.store_id,order.order_id,shiftId,operation,order.revision,method,received,confirmed]).then(r=>r.rows[0].data);
+  await t.test('collecting requires an open cashier shift',async()=>{
+   paidOrder=await save({channel:'DINE_IN',table:(await db.query("SELECT public.rpc_create_position($1,$2,'Bàn 02') AS id",[a.organization_id,a.store_id])).rows[0].id});
+   await assert.rejects(pay(paidOrder,randomUUID()),/OPEN_SHIFT_REQUIRED/);
+  });
+  const shiftOp=randomUUID();
+  await t.test('opening shift is idempotent and only one can be open per cashier',async()=>{
+   const args=[a.organization_id,a.store_id,shiftOp,100000];
+   shift=(await db.query('SELECT public.rpc_open_shift($1,$2,$3,$4) AS data',args)).rows[0].data;
+   assert.equal((await db.query('SELECT public.rpc_open_shift($1,$2,$3,$4) AS data',args)).rows[0].data.id,shift.id);
+   await assert.rejects(db.query('SELECT public.rpc_open_shift($1,$2,$3,$4)',[a.organization_id,a.store_id,randomUUID(),0]),/unique constraint/);
+  });
+  await t.test('underpayment and unconfirmed transfer cannot finalize orders',async()=>{
+   await assert.rejects(pay(paidOrder,shift.id,randomUUID(),'CASH',1),/INSUFFICIENT_PAYMENT/);
+   await assert.rejects(pay(paidOrder,shift.id,randomUUID(),'TRANSFER',80000,false),/TRANSFER_CONFIRMATION_REQUIRED/);
+   assert.equal((await db.query('SELECT order_status FROM public.orders WHERE id=$1',[paidOrder.order_id])).rows[0].order_status,'OPEN');
+  });
+  const paymentOp=randomUUID();
+  await t.test('cash collection records change, finalizes once and releases table',async()=>{
+   payment=await pay(paidOrder,shift.id,paymentOp);
+   assert.equal(Number(payment.amount),80000);assert.equal(Number(payment.change_amount),20000);
+   const replay=await pay(paidOrder,shift.id,paymentOp);assert.equal(replay.id,payment.id);
+   await assert.rejects(pay(paidOrder,shift.id),/ORDER_FINALIZED/);
+   await assert.rejects(save({order:paidOrder.order_id,revision:1}),/ORDER_FINALIZED/);
+   const table=(await db.query('SELECT position_id FROM public.orders WHERE id=$1',[paidOrder.order_id])).rows[0].position_id;
+   await save({channel:'DINE_IN',table});
+  });
+  await t.test('payment records are immutable, including for database owner',async()=>{
+   await db.exec('RESET ROLE');
+   await assert.rejects(db.query('UPDATE public.payments SET amount=1 WHERE id=$1',[payment.id]),/IMMUTABLE_LEDGER_VIOLATION/);
+   await actor(uid);
+  });
+  await t.test('full refund requires a reason, is idempotent and does not delete payment',async()=>{
+   const op=randomUUID();
+   await assert.rejects(db.query('SELECT public.rpc_refund_payment($1,$2,$3,$4,$5,$6)',[a.organization_id,a.store_id,payment.id,shift.id,op,'']),/REASON_REQUIRED/);
+   const args=[a.organization_id,a.store_id,payment.id,shift.id,op,'Khách trả toàn bộ đơn'];
+   const refunded=(await db.query('SELECT public.rpc_refund_payment($1,$2,$3,$4,$5,$6) AS data',args)).rows[0].data;
+   assert.equal(Number(refunded.amount),80000);
+   assert.equal((await db.query('SELECT public.rpc_refund_payment($1,$2,$3,$4,$5,$6) AS data',args)).rows[0].data.id,refunded.id);
+   await assert.rejects(db.query('SELECT public.rpc_refund_payment($1,$2,$3,$4,$5,$6)',[a.organization_id,a.store_id,payment.id,shift.id,randomUUID(),'Hoàn lại lần hai']),/ORDER_FINALIZED/);
+   assert.equal((await db.query('SELECT id FROM public.payments WHERE id=$1',[payment.id])).rows.length,1);
+  });
+  await t.test('voiding a saved open order requires reason and revision',async()=>{
+   const o=await save();const op=randomUUID();
+   await assert.rejects(db.query('SELECT public.rpc_void_order($1,$2,$3,$4,$5,$6)',[a.organization_id,a.store_id,o.order_id,0,op,'Khách hủy đơn']),/VERSION_CONFLICT/);
+   const args=[a.organization_id,a.store_id,o.order_id,o.revision,op,'Khách hủy đơn'];
+   const result=(await db.query('SELECT public.rpc_void_order($1,$2,$3,$4,$5,$6) AS data',args)).rows[0].data;
+   assert.equal(result.order_status,'VOID');
+   assert.equal((await db.query('SELECT public.rpc_void_order($1,$2,$3,$4,$5,$6) AS data',args)).rows[0].data.id,result.id);
+  });
+  await t.test('closing shift persists expected/count/difference and blocks further collection',async()=>{
+   const op=randomUUID();
+   await assert.rejects(db.query('SELECT public.rpc_close_shift($1,$2,$3,$4,$5)',[a.organization_id,a.store_id,shift.id,op,null]),/INVALID_CASH_COUNT/);
+   const args=[a.organization_id,a.store_id,shift.id,op,99000];
+   const closed=(await db.query('SELECT public.rpc_close_shift($1,$2,$3,$4,$5) AS data',args)).rows[0].data;
+   assert.equal(Number(closed.expected_cash),100000);assert.equal(Number(closed.difference),-1000);
+   assert.equal((await db.query('SELECT public.rpc_close_shift($1,$2,$3,$4,$5) AS data',args)).rows[0].data.id,shift.id);
+   await assert.rejects(pay(await save(),shift.id),/OPEN_SHIFT_REQUIRED/);
+  });
+  await t.test('daily report uses store timezone and distinguishes gross/refunds',async()=>{
+   const report=(await db.query("SELECT public.rpc_daily_report($1,$2,(now() AT TIME ZONE 'Asia/Ho_Chi_Minh')::date) AS data",[a.organization_id,a.store_id])).rows[0].data;
+   assert.equal(Number(report.gross),80000);assert.equal(Number(report.refunds),80000);assert.equal(Number(report.paid_orders),1);assert.equal(report.timezone,'Asia/Ho_Chi_Minh');
+   await actor(otherUid);
+   await assert.rejects(db.query('SELECT public.rpc_daily_report($1,$2,current_date)',[a.organization_id,a.store_id]),/PERMISSION_DENIED/);
+  });
  } finally{await db.close();}
 });

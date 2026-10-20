@@ -15,7 +15,7 @@ POS cho quán cà phê: tại chỗ, mang về, giao hàng; hướng tới SaaS 
 ## Hiện đã triển khai
 
 - `/account`: đăng ký/đăng nhập qua Supabase Auth; tạo thương hiệu và cửa hàng đầu tiên cho tài khoản đã xác nhận email; đọc cửa hàng theo RLS; đăng xuất.
-- Menu theo cửa hàng, size/topping và giá; sơ đồ bàn; tạo/sửa đơn online với giá server, snapshot, version và idempotency. **Chưa thu tiền/đóng ca/offline.**
+- Menu theo cửa hàng, size/topping và giá; sơ đồ bàn; tạo/sửa đơn online với giá server, snapshot, version và idempotency. Mở/đóng ca, thu đủ tiền mặt/chuyển khoản xác nhận thủ công, hủy đơn/hoàn toàn bộ có lý do và báo cáo ngày. **Chưa hỗ trợ offline, thanh toán tách hoặc hoàn một phần.**
 - Migration bổ sung cho cách ly tenant, kiểm soát chi nhánh, ràng buộc tenant trên khóa ngoại và chặn RPC sync chưa hoàn thiện.
 - Kiểm thử xác thực, cách ly dữ liệu trên PostgreSQL nhúng (PGlite), smoke test pgTAP và CI Supabase.
 - Graphify tạo graph, báo cáo và HTML qua GitHub Actions.
