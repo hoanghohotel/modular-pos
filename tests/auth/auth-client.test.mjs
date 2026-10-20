@@ -35,3 +35,12 @@ test('an expired token is discarded and cannot be reused',async()=>{
 test('remote connections require HTTPS',()=>{
   assert.throws(()=>new AuthClient({url:'http://example.com',key:'key'}),/HTTPS_REQUIRED/);
 });
+
+test('native fetch keeps its global receiver during sign-in',async()=>{
+ const client=new AuthClient({url:'https://example.supabase.co',key:'public-key',fetcher:async function(){
+  assert.equal(this,globalThis);
+  return response({access_token:'token',user:{id:'u'}});
+ }});
+ await client.signIn('a@example.test','password');
+ assert.equal(client.signedIn,true);
+});
