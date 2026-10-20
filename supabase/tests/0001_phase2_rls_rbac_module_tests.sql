@@ -1,4 +1,14 @@
 BEGIN;
-SELECT plan(14); -- Kiểm thử RLS, Tenant/Store Isolation & Module Registry DAG (Giai đoạn 2)
+SELECT plan(10);
+SELECT has_table('public','organizations','Organizations exist');
+SELECT has_table('public','stores','Stores exist');
+SELECT has_function('public','rpc_bootstrap_workspace',ARRAY['text','text','text','text'],'Bootstrap RPC exists');
+SELECT ok(NOT has_function_privilege('anon','public.rpc_bootstrap_workspace(text,text,text,text)','EXECUTE'),'Anonymous bootstrap is denied');
+SELECT ok(has_function_privilege('authenticated','public.rpc_bootstrap_workspace(text,text,text,text)','EXECUTE'),'Authenticated bootstrap is exposed');
+SELECT ok(NOT has_function_privilege('authenticated','public.rpc_process_sync_batch(uuid,uuid,uuid,jsonb)','EXECUTE'),'Unfinished sync cannot acknowledge writes');
+SELECT ok(NOT has_table_privilege('authenticated','public.v_store_sync_diagnostics_summary','SELECT'),'Legacy owner-rights view is private');
+SELECT ok(NOT has_table_privilege('authenticated','public.memberships','UPDATE'),'Clients cannot elevate memberships');
+SELECT ok(EXISTS(SELECT 1 FROM pg_policies WHERE schemaname='public' AND tablename='stores' AND policyname='stores_read_accessible'),'Store access has an RLS policy');
+SELECT ok((SELECT relrowsecurity AND relforcerowsecurity FROM pg_class WHERE oid='public.stores'::regclass),'Store RLS is enabled and forced');
 SELECT * FROM finish();
 ROLLBACK;
