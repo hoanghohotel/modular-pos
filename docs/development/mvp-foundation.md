@@ -52,3 +52,7 @@ RPC đọc/ghi bảo vệ bằng tenant/store + permission. Owner hiện có quy
 - Báo cáo ngày theo timezone cửa hàng, tách tổng thu và khoản hoàn theo ngày phát sinh. Đây là báo cáo thu tiền cơ bản, chưa phải báo cáo thuế/lợi nhuận/giá vốn.
 - Giới hạn hiện tại: thu đủ một lần, hoàn toàn bộ một lần; chưa hỗ trợ tách phương thức thanh toán, hoàn một phần, chi tiền ngoài hoàn đơn. Danh sách thanh toán/ca trên UI giới hạn 100 bản ghi, hiển thị 20 ca gần nhất. Các ca cũ hơn không được chọn từ UI hiện tại.
 - Browser CI kiểm tra UI 390px/1280px với API giả lập. Kiểm thử database dùng PostgreSQL và Supabase; browser test không thay thế tích hợp Auth/Supabase end-to-end thật.
+
+## Tích hợp HTTP thật trên CI
+
+Job Supabase còn tạo hai tài khoản xác nhận sẵn trên Auth cục bộ, đăng nhập lấy JWT thật, tạo workspace/menu/đơn qua PostgREST và kiểm tra cách ly tenant. Hai yêu cầu thu tiền đồng thời với cùng operation ID phải tạo đúng một thanh toán. Sau đó job hoàn tiền, đóng ca và kiểm tra đối soát. Script từ chối chạy nếu URL Supabase không phải localhost/127.0.0.1; không ghi hoặc in credentials. Dữ liệu kiểm thử bị hủy cùng môi trường CI.
