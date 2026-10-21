@@ -1,6 +1,7 @@
 # Offline sales synchronization
 
-This increment supports **new orders** in an already opened, signed-in sales page.
+Offline sales support **new orders** in a signed-in page. The application shell is
+now saved for offline reload, while authentication still requires connectivity.
 Load the menu and, for cash, open a shift while connected. KDS, printing and ingredient
 inventory remain deferred.
 
@@ -36,10 +37,18 @@ closure. Unpaid imports create OPEN orders; cash imports create PAID orders.
 
 ## Current limits
 
-- The application shell is not cached for offline reload/startup. Keep the signed-in
-  page open during an outage; offline authentication is not implemented.
+- After the page reports that offline preparation is complete, its shell can reopen
+  without connectivity. A reload ends the memory-only session: online login and a
+  successful store permission check remain required before accessing local sales.
+  Keep the signed-in page open during an outage to continue selling.
 - Existing server order edits, refunds, transfers and shift opening/closing require
-  connectivity. Cached menu data is the current page's in-memory data.
+  connectivity. Menu, size, topping and table snapshots persist in IndexedDB under
+  the same backend/user/organization/store scope as the queue. Temporary network,
+  429 and 5xx failures can restore this snapshot after authentication and a successful
+  store permission check. 401/403 and other business errors cannot enable fallback.
+  The interface shows the snapshot time and hides server finance/admin controls.
+  A shift is never restored from disk; cash entry requires a shift previously loaded
+  in the current signed-in page. Server validation remains authoritative.
 - Browser storage can be removed by the operator/browser. A device failure can lose
   unsynced sales. Do not clear site data while records are pending.
 - Reports use server posting time, including imported cash; device creation time is
@@ -57,3 +66,35 @@ includes concurrent import replay, tenant isolation, immutable requests, price-c
 rollback, cash/shift accounting, closed-shift rollback and committed replay after close.
 Browser coverage includes network failure, reload recovery, explicit sync, one-time
 acknowledgement, local cash recording and preventing local shift closure.
+
+## Shell installation and updates
+
+The build hashes the shell assets and public backend configuration to generate
+`public/sw.js` (also copied to `dist/sw.js`). The worker caches only an explicit
+same-origin static allowlist and supported navigation routes; Auth, PostgREST,
+orders and customer API responses never enter Cache Storage. The shell contains
+no account session. Failed installations remove the incomplete new cache.
+Redirected HTML is normalized before caching so Vercel clean URLs remain usable
+for offline navigation.
+
+An updated worker waits while existing tabs remain open. It never forces a reload
+or replaces code beneath a live cart. After synchronizing pending sales, save or
+finish any current cart and close all tabs to activate the update. Activation removes
+older shell caches; it does not remove IndexedDB records. The worker response uses
+no-cache headers to permit update checks. Auth tokens remain memory-only.
+
+## Reconciliation visibility
+
+The queue always shows every unresolved record, followed by the 20 most recent
+acknowledged receipts. Older conflicts cannot disappear behind newer successes.
+Expand an entry to inspect time, channel, customer, original item labels/quantities,
+received cash, calculated change and the server order ID after acknowledgement.
+New display snapshots are local metadata; the immutable server request is unchanged.
+Existing records without display metadata retain their variant identifiers.
+A refresh after a sync attempt updates menu/shift information even when conflicts
+remain, without rewriting those local orders or changing the current cart's prices.
+
+Additional Chromium coverage verifies real Service Worker installation, offline
+navigation, Vercel-style redirects, atomic failed installation, update waiting,
+cache isolation, forbidden-access behavior, original-ID replay and visibility of old
+conflicts after more than 20 new receipts.

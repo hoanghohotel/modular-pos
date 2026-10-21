@@ -1,5 +1,6 @@
 import fs from 'node:fs';
 import path from 'node:path';
+import { createHash } from 'node:crypto';
 
 const rootDir = process.cwd();
 const publicDir = path.join(rootDir, 'public');
@@ -42,3 +43,13 @@ fs.writeFileSync(path.join(publicDir, 'app-config.js'), `window.MODULAR_POS_CONF
 for (const name of ['account.html', 'app-config.js', 'assets']) {
   fs.cpSync(path.join(publicDir, name), path.join(distDir, name), { recursive: true });
 }
+
+// A complete shell is installed atomically. New workers wait for old tabs to close.
+const shellFiles = ['account.html', 'app-config.js', 'assets/account.mjs', 'assets/auth-client.mjs',
+  'assets/sales.mjs', 'assets/offline-store.mjs', 'assets/pwa.mjs', 'service-worker.js'];
+const shellHash = createHash('sha256');
+for (const file of shellFiles) shellHash.update(file).update(fs.readFileSync(path.join(publicDir, file)));
+const worker = fs.readFileSync(path.join(publicDir, 'service-worker.js'), 'utf8')
+  .replace('__BUILD_ID__', shellHash.digest('hex').slice(0, 20));
+fs.writeFileSync(path.join(publicDir, 'sw.js'), worker);
+fs.writeFileSync(path.join(distDir, 'sw.js'), worker);

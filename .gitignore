@@ -36,3 +36,6 @@ graphify-out/
 
 # Build-time public configuration
 public/app-config.js
+
+# Generated versioned offline worker
+public/sw.js

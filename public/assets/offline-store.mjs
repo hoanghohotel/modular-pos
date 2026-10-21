@@ -26,10 +26,10 @@ export class OfflineStore {
       });
     } finally { db.close(); }
   }
-  async enqueue(payload, id = crypto.randomUUID()) {
+  async enqueue(payload, id = crypto.randomUUID(), display = {}) {
     if (!payload || typeof payload !== 'object') throw new Error('INVALID_LOCAL_REQUEST');
     const record = { id: this.scope + ':sale:' + id, scope: this.scope, operationId: id,
-      kind: 'sale', payload: structuredClone(payload), status: 'PENDING', createdAt: Date.now(), attempts: 0 };
+      kind: 'sale', payload: structuredClone(payload), display: structuredClone(display), status: 'PENDING', createdAt: Date.now(), attempts: 0 };
     return this.transact('readwrite', (store, done, tx) => {
       const request = store.get(record.id);
       request.onsuccess = () => {
