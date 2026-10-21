@@ -22,7 +22,9 @@ export class AuthClient {
     if (!response.ok) {
       if (response.status === 401 && authenticated) { this.#token = null; this.#userId = null; }
       const businessCode = typeof data?.message === 'string' ? data.message.match(/^([A-Z][A-Z_]+)(?::|$)/)?.[1] : null;
-      throw new Error(data?.error_code || businessCode || data?.code || `HTTP_${response.status}`);
+      const error = new Error(data?.error_code || businessCode || data?.code || `HTTP_${response.status}`);
+      error.status = response.status;
+      throw error;
     }
     return data;
   }

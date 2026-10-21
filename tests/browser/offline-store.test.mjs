@@ -22,9 +22,14 @@ test('IndexedDB outbox persists, isolates users and requires matching acknowledg
    window.OtherStore=OfflineStore;
   });
   await setup();
-  await page.evaluate(()=>queue.enqueue({total:70000},'stable-id'));
+  await page.evaluate(async()=>{await queue.enqueue({total:70000},'stable-id',{lines:[{name:'Cà phê',quantity:2,unit:35000}]});await queue.cache({version:1,products:[{id:'coffee'}]});});
   await page.reload();await setup();
   assert.equal(await page.evaluate(async()=>(await queue.list()).length),1);
+  assert.equal(await page.evaluate(async()=>(await queue.list())[0].display.lines[0].name),'Cà phê');
+  assert.equal(await page.evaluate(async()=>(await queue.cached()).products[0].id),'coffee');
+  for(const changed of [{userId:'b'},{organizationId:'other'},{storeId:'other'},{url:'https://other.test'}]){
+   assert.equal(await page.evaluate(async changed=>new OtherStore({url:'https://example.test',userId:'a',organizationId:'org',storeId:'store',...changed}).cached(),changed),null);
+  }
   assert.equal(await page.evaluate(async()=>(await new OtherStore({url:'https://example.test',userId:'b',organizationId:'org',storeId:'store'}).list()).length),0);
   assert.equal(await page.evaluate(async()=>{
    try{await queue.enqueue({total:1},'stable-id');return false;}catch{return true;}

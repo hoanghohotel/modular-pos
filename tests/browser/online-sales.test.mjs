@@ -15,7 +15,7 @@ for(const width of [390,1280]) test(`online sales UI at ${width}px`,{timeout:900
  await new Promise(r=>server.listen(0,'127.0.0.1',r));
  const browser=await chromium.launch({headless:true});
  try{
-  const page=await browser.newPage({viewport:{width,height:900}});
+  const page=await browser.newPage({viewport:{width,height:900},serviceWorkers:'block'});
   const errors=[];page.on('pageerror',e=>errors.push(e.message));
   page.on('console',m=>{if(m.type()==='error')console.error('browser console:',m.text());});
   page.on('requestfailed',r=>console.error('request failed:',r.url(),r.failure()?.errorText));
@@ -113,6 +113,33 @@ for(const width of [390,1280]) test(`online sales UI at ${width}px`,{timeout:900
   await page.locator('#countedCash').fill('100000');await page.locator('#closeShiftForm button').click();
   await page.waitForFunction(()=>document.getElementById('salesStatus').textContent.includes('Còn đơn thu tiền tại máy'));
   assert.equal(await page.evaluate(()=>document.documentElement.scrollWidth>innerWidth),false,'No horizontal overflow');
+  await page.evaluate(async({user,org,store})=>{
+   const {OfflineStore}=await import('/assets/offline-store.mjs');
+   const queue=new OfflineStore({url:'https://test.supabase.co',userId:user,organizationId:org,storeId:store});
+   for(let i=0;i<25;i++){
+    const record=await queue.enqueue({p_expected_total:1,p_received_amount:null,p_items:[],p_customer:{}},'receipt-'+i);
+    await queue.update(record,{status:'ACKNOWLEDGED',result:{order_id:'receipt'}});
+   }
+  },{user,org,store});
+  // Create a conflict older than the next batch of receipts.
+  await page.evaluate(async({user,org,store})=>{
+   const {OfflineStore}=await import('/assets/offline-store.mjs');
+   const queue=new OfflineStore({url:'https://test.supabase.co',userId:user,organizationId:org,storeId:store});
+   for(const record of await queue.list())if(record.status==='PENDING')await queue.update(record,{status:'CONFLICT',error:'OFFLINE_PRICE_CONFLICT'});
+   const record=await queue.enqueue({p_expected_total:35000,p_received_amount:50000,p_channel:'TAKEAWAY',p_items:[{variant_id:'old-item',quantity:1}],p_customer:{name:'Khách cũ'}},'old-conflict');
+   await queue.update(record,{status:'CONFLICT',error:'OFFLINE_PRICE_CONFLICT'});
+   for(let i=25;i<50;i++){
+    const done=await queue.enqueue({p_expected_total:1,p_received_amount:null,p_items:[],p_customer:{}},'receipt-'+i);
+    await queue.update(done,{status:'ACKNOWLEDGED',result:{order_id:'receipt'}});
+   }
+  },{user,org,store});
+  await page.locator('#syncOutbox').click();
+  await page.waitForFunction(()=>document.getElementById('outboxList').textContent.includes('old-conf'));
+  assert.equal(await page.locator('#outboxList > li').count(),22,'All unresolved sales plus 20 recent receipts');
+  const conflict=page.locator('#outboxList > li').filter({hasText:'old-conf'});
+  await conflict.locator('summary').click();
+  assert.match(await conflict.innerText(),/Khách cũ/);
+  assert.match(await conflict.innerText(),/Tiền thừa/);
   assert.deepEqual(errors,[]);
   await page.locator('#logout').click();
   await page.locator('#loginPanel').waitFor({state:'visible'});

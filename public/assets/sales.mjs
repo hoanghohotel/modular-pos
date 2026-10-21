@@ -2,7 +2,8 @@ import { OfflineStore } from './offline-store.mjs';
 const el=id=>document.getElementById(id);
 const money=value=>`${Number(value).toLocaleString('vi-VN')} ₫`;
 let api,store,context={},products=[],variants=[],modifiers=[],orders=[],cart=[],editing=null,pending=null,generation=0,dirty=false,currentShift=null,payments=[];
-let outbox=null;
+let outbox=null,limited=false;
+const connectionFailure=error=>error instanceof TypeError||error.status>=500||error.status===429;
 const status=text=>{el('salesStatus').textContent=text;};
 const rpc=(name,args)=>api.request(`/rest/v1/rpc/${name}`,{method:'POST',body:{p_org_id:store.organization_id,p_store_id:store.id,...args}});
 const rows=(table,select='*',extra='')=>api.request(`/rest/v1/${table}?select=${select}&store_id=eq.${store.id}${extra}`);
@@ -36,19 +37,49 @@ function renderCart(){
  renderFinance();
 }
 async function refresh(){
- const current=generation;
- const [ps,vs,ms,tables,open]=await Promise.all([rows('products','*','&active=eq.true&order=name'),rows('product_variants'),rows('product_modifiers'),rows('service_positions','*','&active=eq.true&order=name'),rows('orders','*','&order_status=eq.OPEN&order=updated_at.desc&limit=200')]);
+ const current=generation,queue=outbox;
+ let ps,vs,ms,tables,open,updatedAt=Date.now(),cached=false,cacheFailed=false;
+ try {
+  [ps,vs,ms,tables,open]=await Promise.all([rows('products','*','&active=eq.true&order=name'),rows('product_variants'),rows('product_modifiers'),rows('service_positions','*','&active=eq.true&order=name'),rows('orders','*','&order_status=eq.OPEN&order=updated_at.desc&limit=200')]);
+  if(![ps,vs,ms,tables,open].every(Array.isArray))throw new Error('INVALID_CATALOG_RESPONSE');
+ }catch(error){
+  if(!connectionFailure(error)||!queue)throw error;
+  const snapshot=await queue.cached();
+  if(!snapshot||snapshot.version!==1||!Number.isFinite(snapshot.updatedAt)||
+   !['products','variants','modifiers','positions'].every(key=>Array.isArray(snapshot[key])))throw error;
+  ({products:ps,variants:vs,modifiers:ms,positions:tables,updatedAt}=snapshot);
+  open=[];cached=true;
+ }
  if(current!==generation)return;
- products=ps;variants=vs;modifiers=ms;orders=open;
+ if(!cached&&queue){
+  try{await queue.cache({version:1,updatedAt,products:ps,variants:vs,modifiers:ms,positions:tables});}
+  catch{cacheFailed=true;}
+  if(current!==generation)return;
+ }
+ limited=cached;products=ps;variants=vs;modifiers=ms;orders=open;
+ const selectedProduct=el('productChoice').value,selectedVariant=el('variantChoice').value,selectedPosition=el('positionChoice').value;
  el('productChoice').replaceChildren(...products.map(p=>option(p.id,`${p.category} · ${p.name}`)));
+ if(products.some(p=>p.id===selectedProduct))el('productChoice').value=selectedProduct;
  el('positionChoice').replaceChildren(option('','Chọn bàn'),...tables.map(p=>option(p.id,p.name)));
+ if(tables.some(p=>p.id===selectedPosition))el('positionChoice').value=selectedPosition;
  el('openOrders').replaceChildren(...orders.map(o=>{
   const row=document.createElement('li');const label=document.createElement('span');label.textContent=`${o.id.slice(0,8)} · ${o.channel==='DINE_IN'?(tables.find(p=>p.id===o.position_id)?.name||'Tại bàn'):o.channel==='DELIVERY'?'Giao hàng':'Mang về'} · ${money(o.total_amount)}`;
   const button=document.createElement('button');button.type='button';button.className='secondary';button.textContent='Mở đơn';button.addEventListener('click',()=>run(()=>openOrder(o)));row.append(label,button);return row;
  }));
- if(!orders.length){const item=document.createElement('li');item.textContent='Chưa có đơn đang mở.';el('openOrders').append(item);}
- renderSelection();renderCart();renderPriceEditor();
- await refreshFinance();
+ if(!orders.length){const item=document.createElement('li');item.textContent=cached?'Chưa thể tải đơn trên server. Có thể lưu đơn mới tại máy.':'Chưa có đơn đang mở.';el('openOrders').append(item);}
+ renderSelection();
+ if(variants.some(v=>v.id===selectedVariant&&v.active&&v.product_id===el('productChoice').value))el('variantChoice').value=selectedVariant;
+ renderCart();renderPriceEditor();
+ if(!cached){
+  try{await refreshFinance();}catch(error){if(!connectionFailure(error))throw error;limited=true;}
+ }
+ if(current!==generation)return;
+ el('catalogAdmin').hidden=limited||!context.can_manage_catalog;
+ const time=new Date(updatedAt).toLocaleString('vi-VN',{timeZone:store.timezone||'Asia/Ho_Chi_Minh'});
+ el('catalogStatus').textContent=(limited?'Đang dùng dữ liệu lưu tại máy từ '+time+'. Giá và bàn sẽ được kiểm tra khi đồng bộ.':'Đã tải menu lúc '+time+'.')+
+  (cacheFailed?' Chưa lưu được bản menu bền vững. Hãy giữ trang mở.':'');
+ renderFinance();
+ return !limited;
 }
 async function openOrder(order){
  const current=generation;
@@ -85,7 +116,7 @@ el('addItem').addEventListener('click',()=>{
  dirty=true;cart.push({variant_id:v.id,modifier_ids:selected.map(m=>m.id),quantity,name:`${p.name} / ${v.name}${selected.length?' + '+selected.map(m=>m.name).join(', '):''}`,unit:Number(v.price)+selected.reduce((s,m)=>s+Number(m.price),0)});pending=null;renderCart();
 });
 el('newOrder').addEventListener('click',()=>{reset();status('Đã mở giỏ hàng mới.');});
-el('reloadOrders').addEventListener('click',()=>run(async()=>{await refresh();status('Đã tải dữ liệu mới nhất.');}));
+el('reloadOrders').addEventListener('click',()=>run(async()=>{const online=await refresh();status(online?'Đã tải dữ liệu mới nhất.':'Chưa kết nối được server. Đang dùng menu lưu tại máy để tạo đơn mới.');}));
 el('orderForm').addEventListener('submit',e=>{
  e.preventDefault();if(!context.can_sell)return;
  run(async()=>{
@@ -119,7 +150,7 @@ el('positionForm').addEventListener('submit',e=>{e.preventDefault();run(async()=
 priceRow('variant');
 window.addEventListener('workspace:ready',async e=>{
  const current=++generation;const detail=e.detail;
- el('salesPanel').hidden=true;context={};currentShift=null;payments=[];financePending.clear();reset();
+ el('salesPanel').hidden=true;context={};limited=false;currentShift=null;payments=[];financePending.clear();reset();
  outbox=null;
  if(!detail?.store)return;
  api=detail.client;store=detail.store;
@@ -142,15 +173,15 @@ async function financial(name,args){
 }
 function renderFinance(){
  el('offlineCashForm').hidden=!currentShift||!context.can_collect;
- el('financeArea').hidden=!(context.can_manage_shift||context.can_collect||context.can_void);
+ el('financeArea').hidden=limited||!(context.can_manage_shift||context.can_collect||context.can_void);
  el('openShiftForm').hidden=!context.can_manage_shift||!!currentShift;
  el('closeShiftForm').hidden=!context.can_manage_shift||!currentShift;
  el('shiftSummary').textContent=currentShift?`Ca ${currentShift.id.slice(0,8)} · Tiền đầu ca: ${money(currentShift.opening_amount)}`:'Bạn chưa có ca đang mở.';
  el('paymentForm').hidden=!context.can_collect||!currentShift||!editing||dirty;
  el('voidForm').hidden=!context.can_void||!editing||dirty;
  el('paymentOrderSummary').textContent=editing?`Đơn ${editing.id.slice(0,8)} · Cần thu ${money(editing.total_amount)}`:'Mở một đơn đã lưu để thu tiền.';
- el('refundArea').hidden=!context.can_refund||!currentShift;
- el('reportArea').hidden=!context.can_report;
+ el('refundArea').hidden=limited||!context.can_refund||!currentShift;
+ el('reportArea').hidden=limited||!context.can_report;
 }
 async function refreshFinance(){
  const current=generation;
@@ -209,7 +240,7 @@ async function enqueueLocal(cash,operationId=null){
  await queue.enqueue({p_channel:channel,p_position_id:position,
   p_items:cart.map(({variant_id,modifier_ids,quantity})=>({variant_id,modifier_ids,quantity})),
   p_customer:customer,p_expected_total:total,p_shift_id:cash?currentShift.id:null,
-  p_payment_operation_id:cash?crypto.randomUUID():null,p_received_amount:received},operationId);
+  p_payment_operation_id:cash?crypto.randomUUID():null,p_received_amount:received},operationId,{lines:cart.map(({name,quantity,unit})=>({name,quantity,unit})),position:el('positionChoice').selectedOptions[0]?.textContent||''});
  if(current!==generation)return;
  reset();el('offlineCashForm').reset();await showOutbox();
  status(cash?'Đã lưu tại máy việc nhận tiền mặt. Chưa xác nhận trên server; cần đồng bộ trước khi chốt ca.':'Đã lưu đơn bền vững tại máy. Đơn đang chờ đồng bộ.');
@@ -220,12 +251,33 @@ async function showOutbox(){
  const conflicts={OFFLINE_PRICE_CONFLICT:'Giá đã thay đổi. Cần đối soát số tiền trước khi thử lại.',OPEN_SHIFT_REQUIRED:'Ca thu tiền không còn mở. Cần đối soát với quản lý.',PERMISSION_DENIED:'Tài khoản không còn quyền đồng bộ đơn này.',VARIANT_UNAVAILABLE:'Size đã ngừng bán.',MODIFIER_UNAVAILABLE:'Topping đã ngừng bán.',POSITION_NOT_FOUND:'Bàn không còn khả dụng.','23505':'Bàn đã có đơn đang mở.',IDEMPOTENCY_KEY_REUSED:'Mã yêu cầu đã được dùng cho dữ liệu khác. Cần đối soát.'};
  const pending=records.filter(r=>r.status!=='ACKNOWLEDGED');
  el('outboxSummary').textContent=pending.length+' đơn chưa đồng bộ · '+pending.filter(r=>r.status==='CONFLICT').length+' xung đột';
- el('outboxList').replaceChildren(...records.slice(-20).reverse().map(record=>{
+ const visible=[...pending,...records.filter(r=>r.status==='ACKNOWLEDGED').slice(-20).reverse()];
+ el('outboxList').replaceChildren(...visible.map(record=>{
   const li=document.createElement('li');
-  li.textContent=record.operationId.slice(0,8)+' · '+money(record.payload.p_expected_total)+' · '+
+  const details=document.createElement('details'),summary=document.createElement('summary');
+  summary.textContent=record.operationId.slice(0,8)+' · '+money(record.payload.p_expected_total)+' · '+
    (record.status==='ACKNOWLEDGED'?'Đã đồng bộ':record.status==='CONFLICT'?'Cần xử lý: '+(conflicts[record.error]||'Server chưa chấp nhận dữ liệu. Kiểm tra đơn và quyền tài khoản.'):'Chờ đồng bộ')+
    (record.payload.p_received_amount!==null?' · Đã ghi nhận nhận tiền mặt tại máy':'');
-  return li;
+  details.append(summary);
+  const description=document.createElement('p'),payload=record.payload;
+  const channel=payload.p_channel==='DINE_IN'?'Tại bàn':payload.p_channel==='DELIVERY'?'Giao hàng':'Mang về';
+  description.textContent=new Date(record.createdAt).toLocaleString('vi-VN')+' · '+channel+
+   (payload.p_position_id?' · '+(record.display?.position||payload.p_position_id):'')+
+   (payload.p_customer?.name?' · Khách: '+payload.p_customer.name:'')+
+   (payload.p_customer?.phone?' · '+payload.p_customer.phone:'')+
+   (payload.p_customer?.address?' · '+payload.p_customer.address:'');
+  details.append(description);
+  for(const [index,line] of (record.display?.lines||payload.p_items||[]).entries()){
+   const item=document.createElement('p');
+   item.textContent=(line.name||'Món '+(index+1)+' ('+line.variant_id+')')+' × '+line.quantity+
+    (Number.isFinite(line.unit)?' · '+money(line.unit*line.quantity):'');
+   details.append(item);
+  }
+  if(payload.p_received_amount!==null){
+   const cash=document.createElement('p');cash.textContent='Khách đưa '+money(payload.p_received_amount)+' · Tiền thừa theo đơn tại máy '+money(payload.p_received_amount-payload.p_expected_total);details.append(cash);
+  }
+  if(record.result?.order_id){const receipt=document.createElement('p');receipt.textContent='Mã đơn server: '+record.result.order_id;details.append(receipt);}
+  li.append(details);return li;
  }));
  el('offlineCashForm').hidden=!currentShift||!context.can_collect;
 }
@@ -239,7 +291,8 @@ async function syncLocal(retryConflicts=false){
  if(current!==generation)return;
  await showOutbox();
  const remaining=(await queue.list()).filter(r=>r.status!=='ACKNOWLEDGED');
- if(!remaining.length){await refresh();status('Đã đồng bộ toàn bộ hàng đợi.');}
+ await refresh();
+ if(!remaining.length){status('Đã đồng bộ toàn bộ hàng đợi.');}
  else status('Hàng đợi vẫn giữ trên máy. Xung đột giá, bàn, ca hoặc quyền cần được kiểm tra; không tự đổi dữ liệu đã ghi nhận.');
 }
 el('queueOrder').addEventListener('click',()=>run(()=>enqueueLocal(false)));
