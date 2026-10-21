@@ -1,3 +1,4 @@
+export const isUnresolved = record => !['ACKNOWLEDGED', 'CANCELLED'].includes(record.status);
 const DATABASE = 'modular-pos-offline-v1';
 function openDatabase() {
   return new Promise((resolve, reject) => {
@@ -60,23 +61,33 @@ export class OfflineStore {
       const request = store.get(record.id);
       request.onsuccess = () => {
         const current = request.result;
-        if (!current || current.scope !== this.scope || current.status === 'ACKNOWLEDGED') return;
+        if (!current || current.scope !== this.scope || !isUnresolved(current)) return;
         const next = { ...current, ...patch, attempts: current.attempts + 1 };
         store.put(next); done(next);
       };
     });
   }
+  async acceptResult(record, result) {
+    if (result?.operation_id !== record.operationId) throw new Error('INVALID_SERVER_ACK');
+    let status = 'ACKNOWLEDGED';
+    if (result.status === 'CANCELLED') {
+      const refund = record.payload.p_received_amount == null ? 0 : record.payload.p_expected_total;
+      if (!result.review_id || typeof result.reason !== 'string' || result.reason.trim().length < 3 ||
+          Number(result.cash_refund_amount) !== refund) throw new Error('INVALID_SERVER_ACK');
+      status = 'CANCELLED';
+    } else if (!result.order_id) throw new Error('INVALID_SERVER_ACK');
+    return this.update(record, { status, result, error: null });
+  }
   async flush(send, { retryConflicts = false } = {}) {
     const work = async () => {
       for (const record of await this.list()) {
-        if (record.status === 'ACKNOWLEDGED' || (record.status === 'CONFLICT' && !retryConflicts)) continue;
+        if (!isUnresolved(record) || (record.status === 'CONFLICT' && !retryConflicts)) continue;
         try {
           const result = await send(record.payload, record.operationId);
-          if (!result?.order_id || result.operation_id !== record.operationId) throw new Error('INVALID_SERVER_ACK');
-          await this.update(record, { status: 'ACKNOWLEDGED', result, error: null });
+          await this.acceptResult(record, result);
         } catch (error) {
           const code = error.message || 'NETWORK_ERROR';
-          const transient = error instanceof TypeError || /^(HTTP_5|HTTP_429|AUTH_REQUIRED|INVALID_SERVER_ACK|NETWORK_ERROR)/.test(code);
+          const transient = error instanceof TypeError || error.status >= 500 || error.status === 429 || error.status === 401 || /^(HTTP_5|HTTP_429|AUTH_REQUIRED|INVALID_SERVER_ACK|NETWORK_ERROR)/.test(code);
           await this.update(record, { status: transient ? 'PENDING' : 'CONFLICT', error: code });
           if (transient) break;
         }

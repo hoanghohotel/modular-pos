@@ -85,5 +85,42 @@ test('real Supabase Auth + PostgREST sales transaction', {timeout:90000}, async(
  const afterClose=await countOrders();
  await assert.rejects(rpc('rpc_sync_offline_sale',{...offline,p_operation_id:randomUUID(),p_payment_operation_id:randomUUID()}),/OPEN_SHIFT_REQUIRED/);
  assert.equal(await countOrders(),afterClose,'Closed shift leaves no partial unpaid order');
+ // A proposal freezes the original intent before any customer cash is returned.
+ const reviewRequest={...offline,p_operation_id:undefined,p_expected_total:70000,p_payment_operation_id:randomUUID()};
+ delete reviewRequest.p_operation_id;
+ const reviewOperation=randomUUID();
+ const reviewArgs={p_operation_id:reviewOperation,p_request:reviewRequest,p_note:'Khách hủy sau khi đối soát tiền mặt'};
+ const review=await rpc('rpc_submit_offline_review',reviewArgs);
+ assert.equal((await rpc('rpc_submit_offline_review',reviewArgs)).review_id,review.review_id);
+ assert.equal((await b.request('/rest/v1/offline_sale_reviews?select=id')).length,0);
+ await assert.rejects(b.request('/rest/v1/rpc/rpc_cancel_offline_review',{method:'POST',body:{p_org_id:w.organization_id,p_store_id:w.store_id,p_review_id:review.review_id,p_operation_id:randomUUID(),p_reason:'Other tenant cancellation',p_cash_refunded:true}}),/PERMISSION_DENIED/);
+ await assert.rejects(rpc('rpc_sync_offline_sale',{...reviewRequest,p_operation_id:reviewOperation}),/OFFLINE_REVIEW_REQUIRED/);
+ const held=await rpc('rpc_save_order',{p_operation_id:reviewOperation,p_channel:reviewRequest.p_channel,p_position_id:null,p_items:reviewRequest.p_items,p_customer:reviewRequest.p_customer,p_order_id:null,p_expected_revision:null});
+ assert.equal(held.status,'REVIEW_REQUIRED');
+ const cancelArgs={p_review_id:review.review_id,p_operation_id:randomUUID(),p_reason:'Khách đã nhận lại đủ tiền đơn',p_cash_refunded:true};
+ await assert.rejects(rpc('rpc_cancel_offline_review',{...cancelArgs,p_cash_refunded:false}),/CASH_REFUND_CONFIRMATION_REQUIRED/);
+ const beforeCancel=await countOrders();
+ const [cancelled,cancelReplay]=await Promise.all([rpc('rpc_cancel_offline_review',cancelArgs),rpc('rpc_cancel_offline_review',cancelArgs)]);
+ assert.equal(cancelled.review_id,cancelReplay.review_id);assert.equal(Number(cancelled.cash_refund_amount),70000);
+ assert.equal((await rpc('rpc_sync_offline_sale',{...reviewRequest,p_operation_id:reviewOperation})).status,'CANCELLED');
+ assert.equal((await rpc('rpc_save_order',{p_operation_id:reviewOperation,p_channel:reviewRequest.p_channel,p_position_id:null,p_items:reviewRequest.p_items,p_customer:reviewRequest.p_customer,p_order_id:null,p_expected_revision:null})).status,'CANCELLED');
+ assert.equal(await countOrders(),beforeCancel,'Cancelling an unposted sale creates no phantom order');
+ const audit=await a.request('/rest/v1/audit_logs?select=id&action_key=eq.pos.offline.review_cancelled&entity_id=eq.'+review.review_id);
+ assert.equal(audit.length,1);
+ // Racing a proposal against an unpaid sync either commits once or freezes once.
+ const raceOperation=randomUUID(),raceRequest={...reviewRequest,p_shift_id:null,p_payment_operation_id:null,p_received_amount:null};
+ const beforeRace=await countOrders();
+ const [proposal,attempt]=await Promise.allSettled([
+  rpc('rpc_submit_offline_review',{p_operation_id:raceOperation,p_request:raceRequest,p_note:'Concurrent cancellation proposal'}),
+  rpc('rpc_sync_offline_sale',{...raceRequest,p_operation_id:raceOperation})
+ ]);
+ assert.equal(proposal.status,'fulfilled');
+ if(proposal.value.status==='OPEN'){
+  assert.equal(attempt.status,'rejected');assert.match(attempt.reason.message,/OFFLINE_REVIEW_REQUIRED/);
+  assert.equal(await countOrders(),beforeRace);
+ }else{
+  assert.equal(proposal.value.status,'SYNCED');assert.equal(attempt.status,'fulfilled');
+  assert.equal(proposal.value.result.order_id,attempt.value.order_id);assert.equal(await countOrders(),beforeRace+1);
+ }
  await Promise.all([a.signOut(),b.signOut()]);
 });
