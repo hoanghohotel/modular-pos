@@ -6,7 +6,7 @@ import path from 'node:path';
 import { chromium } from 'playwright';
 
 async function fixture() {
- const state={outage:0,user:'user-a',version:'v1',breakInstall:false,sync:[]};
+ const state={outage:0,user:'user-a',version:'v1',breakInstall:false,htmlError:false,sync:[]};
  const root=path.resolve('public');
  const server=createServer(async(req,res)=>{
   const pathname=new URL(req.url,'http://local').pathname;
@@ -20,6 +20,7 @@ async function fixture() {
    if(pathname.endsWith('/organizations'))return json([{id:'org',name:'Cafe'}]);
    if(pathname.endsWith('/stores'))return json([{id:'store',organization_id:'org',name:'Cafe',code:'MAIN'}]);
    if(pathname.endsWith('/rpc_store_context'))return json({can_sell:true,can_manage_catalog:true,can_manage_shift:true,can_collect:true});
+   if(state.outage&&state.htmlError){res.writeHead(state.outage,{'Content-Type':'text/html'}).end('<h1>Gateway unavailable</h1>');return;}
    if(state.outage)return json({code:'PGRST000',message:state.outage===403?'PERMISSION_DENIED':'Unavailable'},state.outage);
    if(pathname.endsWith('/products'))return json([{id:'coffee',name:'Cà phê',category:'Nước',active:true}]);
    if(pathname.endsWith('/product_variants'))return json([{id:'coffee-m',product_id:'coffee',name:'M',price:35000,active:true}]);
@@ -66,7 +67,7 @@ test('cached shell reloads offline; catalog fallback is scoped and cannot bypass
   await login();await page.locator('#salesPanel').waitFor({state:'visible'});
   await page.waitForFunction(()=>document.getElementById('catalogStatus').textContent.startsWith('Đã tải menu'));
   // A fresh Auth/store-context check succeeds, but menu APIs fail during startup.
-  state.outage=503;
+  state.outage=503;state.htmlError=true;
   await page.reload();await login();
   await page.locator('#salesPanel').waitFor({state:'visible'});
   assert.match(await page.locator('#catalogStatus').textContent(),/dữ liệu lưu tại máy/);
@@ -93,7 +94,7 @@ test('cached shell reloads offline; catalog fallback is scoped and cannot bypass
   assert.equal(await page.locator('#salesPanel').isVisible(),false,'Offline reload does not restore an authenticated session');
   assert.match(await page.locator('#connectionStatus').textContent(),/Đang mất mạng/);
   assert.match(await page.title(),/v1/);
-  await context.setOffline(false);state.outage=403;
+  await context.setOffline(false);state.outage=403;state.htmlError=false;
   await login();
   await page.waitForFunction(()=>document.getElementById('salesStatus').textContent.includes('chưa được cấp quyền'));
   assert.equal(await page.locator('#salesPanel').isVisible(),false,'Denied access cannot fall back to a cached catalog');

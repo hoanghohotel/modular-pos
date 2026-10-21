@@ -43,7 +43,7 @@ async function refresh(){
   [ps,vs,ms,tables,open]=await Promise.all([rows('products','*','&active=eq.true&order=name'),rows('product_variants'),rows('product_modifiers'),rows('service_positions','*','&active=eq.true&order=name'),rows('orders','*','&order_status=eq.OPEN&order=updated_at.desc&limit=200')]);
   if(![ps,vs,ms,tables,open].every(Array.isArray))throw new Error('INVALID_CATALOG_RESPONSE');
  }catch(error){
-  if(!connectionFailure(error)||!queue)throw error;
+  if(!connectionFailure(error)||!api.signedIn||!queue)throw error;
   const snapshot=await queue.cached();
   if(!snapshot||snapshot.version!==1||!Number.isFinite(snapshot.updatedAt)||
    !['products','variants','modifiers','positions'].every(key=>Array.isArray(snapshot[key])))throw error;

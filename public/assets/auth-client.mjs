@@ -18,9 +18,18 @@ export class AuthClient {
       headers: { apikey: this.key, 'Content-Type': 'application/json', ...(authenticated ? { Authorization: `Bearer ${this.#token}` } : {}) },
       ...(body === undefined ? {} : { body: JSON.stringify(body) }),
     });
-    const data = response.status === 204 ? null : await response.json();
+    if (response.status === 401 && authenticated) { this.#token = null; this.#userId = null; }
+    let data = null;
+    if (response.status !== 204) {
+      try { data = await response.json(); }
+      catch (cause) {
+        if (cause instanceof TypeError) throw cause;
+        const error = new Error(response.ok ? 'INVALID_JSON_RESPONSE' : `HTTP_${response.status}`);
+        error.status = response.status;
+        throw error;
+      }
+    }
     if (!response.ok) {
-      if (response.status === 401 && authenticated) { this.#token = null; this.#userId = null; }
       const businessCode = typeof data?.message === 'string' ? data.message.match(/^([A-Z][A-Z_]+)(?::|$)/)?.[1] : null;
       const error = new Error(data?.error_code || businessCode || data?.code || `HTTP_${response.status}`);
       error.status = response.status;

@@ -67,3 +67,13 @@ test('HTTP status distinguishes temporary outages from denied access',async()=>{
  status=403;
  await assert.rejects(client.stores(),error=>error.status===403);
 });
+
+test('non-JSON gateway errors retain status and a malformed 401 still clears the session',async()=>{
+ let status=503,calls=0;
+ const client=new AuthClient({url:'https://example.supabase.co',key:'public-key',fetcher:async()=>++calls===1?response({access_token:'token',user:{id:'u'}}):{ok:false,status,json:async()=>{throw new SyntaxError('HTML gateway error');}}});
+ await client.signIn('a@example.test','password');
+ await assert.rejects(client.stores(),error=>error.status===503&&error.message==='HTTP_503');
+ status=403;await assert.rejects(client.stores(),error=>error.status===403);
+ status=401;await assert.rejects(client.stores(),error=>error.status===401);
+ assert.equal(client.signedIn,false);assert.equal(client.userId,null);
+});
