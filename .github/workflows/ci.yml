@@ -1,29 +1,56 @@
-name: Modular POS CI (Phase 1 - Phase 9)
-
+name: MVP Foundation CI
 on:
   push:
-    branches: [main, develop]
+    branches: [main, develop, 'feat/**']
   pull_request:
     branches: [main]
-
+concurrency:
+  group: ${{ github.workflow }}-${{ github.head_ref || github.ref_name }}
+  cancel-in-progress: true
+permissions:
+  contents: read
 jobs:
-  domain-and-contract-tests:
-    name: Run Domain & Offline Sync Tests (Node.js 20)
+  application:
     runs-on: ubuntu-latest
+    timeout-minutes: 10
     steps:
-      - name: Checkout repository
-        uses: actions/checkout@v4
-
-      - name: Setup Node.js 20
-        uses: actions/setup-node@v4
+      - uses: actions/checkout@v4
+      - uses: actions/setup-node@v4
         with:
-          node-version: '20'
+          node-version: '22'
+          cache: npm
+      - run: npm ci
+      - run: npm test
+      - run: npm run build
+  supabase-database:
+    runs-on: ubuntu-latest
+    timeout-minutes: 20
+    steps:
+      - uses: actions/checkout@v4
+      - uses: supabase/setup-cli@v1
+        with:
+          version: latest
+      - run: supabase start
+      - run: supabase db reset
+      - run: supabase test db
+      - uses: actions/setup-node@v4
+        with:
+          node-version: '22'
+      - run: node --test tests/integration/supabase-api.test.mjs
+      - if: always()
+        run: supabase stop --no-backup
 
-      - name: Verify SQL Migrations & pgTAP Test Files Exist
-        run: |
-          ls -la supabase/migrations/
-          ls -la supabase/tests/
-
-      - name: Run Automated Test Suites (Phase 3 -> Phase 9)
-        run: |
-          node --test packages/domain-specs/test/*.test.mjs
+  browser:
+    runs-on: ubuntu-24.04
+    timeout-minutes: 15
+    steps:
+      - uses: actions/checkout@v4
+      - uses: actions/setup-node@v4
+        with:
+          node-version: '22'
+          cache: npm
+      - run: npm ci
+      - run: npm install --no-save --package-lock=false playwright@1.56.1
+      - run: npx playwright install --with-deps chromium
+      - run: npm run build
+      - run: node --test tests/browser/*.test.mjs

@@ -1,0 +1,11 @@
+BEGIN;
+SELECT plan(7);
+SELECT has_table('public','cash_shifts','Cash shifts are persisted');
+SELECT has_table('public','payments','Payments are persisted');
+SELECT has_table('public','refunds','Refunds are separate immutable entries');
+SELECT ok(NOT has_table_privilege('authenticated','public.payments','INSERT'),'Direct collection cannot bypass transaction RPC');
+SELECT ok(NOT has_function_privilege('authenticated','public.shift_cash_balance(uuid)','EXECUTE'),'Internal cash balance helper is not exposed');
+SELECT ok(NOT has_function_privilege('anon','public.rpc_open_shift(uuid,uuid,uuid,bigint)','EXECUTE'),'Anonymous shift opening is denied');
+SELECT has_function('public','rpc_daily_report',ARRAY['uuid','uuid','date'],'Reports use a date in store timezone');
+SELECT * FROM finish();
+ROLLBACK;

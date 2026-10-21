@@ -8,24 +8,43 @@
   "cleanUrls": true,
   "rewrites": [
     {
+      "source": "/account",
+      "destination": "/account.html"
+    },
+    {
       "source": "/login",
-      "destination": "/index.html"
-    },
-    {
-      "source": "/pos",
-      "destination": "/index.html"
-    },
-    {
-      "source": "/kds",
-      "destination": "/index.html"
+      "destination": "/account.html"
     },
     {
       "source": "/admin",
+      "destination": "/account.html"
+    },
+    {
+      "source": "/pos",
+      "destination": "/account.html"
+    },
+    {
+      "source": "/",
+      "destination": "/account.html"
+    },
+    {
+      "source": "/demo",
       "destination": "/index.html"
     },
     {
       "source": "/(.*)",
-      "destination": "/index.html"
+      "destination": "/account.html"
+    }
+  ],
+  "headers": [
+    {
+      "source": "/sw.js",
+      "headers": [
+        {
+          "key": "Cache-Control",
+          "value": "no-cache, no-store, must-revalidate"
+        }
+      ]
     }
   ]
 }

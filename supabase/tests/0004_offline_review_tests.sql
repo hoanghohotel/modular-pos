@@ -1,0 +1,12 @@
+BEGIN;
+SELECT plan(8);
+SELECT has_table('public','offline_sale_reviews','Offline cancellation reviews are durable');
+SELECT ok(NOT has_table_privilege('authenticated','public.offline_sale_reviews','INSERT'),'Direct review insertion is denied');
+SELECT ok(NOT has_table_privilege('authenticated','public.offline_sale_reviews','UPDATE'),'Direct approval is denied');
+SELECT ok(NOT has_table_privilege('authenticated','public.offline_sale_reviews','DELETE'),'Review deletion is denied');
+SELECT ok(has_function_privilege('authenticated','public.rpc_submit_offline_review(uuid,uuid,uuid,jsonb,text)','EXECUTE'),'Signed-in staff can request review through authorized RPC');
+SELECT ok(NOT has_function_privilege('anon','public.rpc_cancel_offline_review(uuid,uuid,uuid,uuid,text,boolean)','EXECUTE'),'Anonymous cancellation is denied');
+SELECT ok(NOT has_function_privilege('authenticated','public.offline_review_finance_payload(jsonb)','EXECUTE'),'Internal receipt fingerprint is not exposed');
+SELECT ok(EXISTS(SELECT 1 FROM public.permissions WHERE permission_key='pos.offline.resolve'),'Resolution has its own permission');
+SELECT * FROM finish();
+ROLLBACK;

@@ -1,0 +1,69 @@
+<!doctype html>
+<html lang="vi">
+<head>
+<meta charset="utf-8"><meta name="viewport" content="width=device-width,initial-scale=1">
+<title>Tài khoản · Modular POS</title>
+<style>
+:root{color-scheme:light dark;font-family:system-ui,sans-serif;color:light-dark(#17221f,#e9f2ee);background:light-dark(#f2f6f3,#111916)}*{box-sizing:border-box}body{margin:0;padding:24px}main{max-width:640px;margin:5vh auto}header{margin-bottom:32px}h1{font-size:28px;margin-bottom:8px}p{line-height:1.6}section{background:light-dark(#fff,#19251f);padding:24px;border:1px solid light-dark(#d7e4dc,#34473c);border-radius:16px;margin:20px 0}form{display:grid;gap:16px}label{display:grid;gap:8px}input,select,button{font:inherit;min-height:46px;padding:10px 12px;border-radius:8px;border:1px solid light-dark(#b7c9bf,#52675b);width:100%}button{cursor:pointer;background:light-dark(#176445,#99dfb7);color:light-dark(#fff,#10271a);font-weight:600}button.secondary{background:transparent;color:inherit}button:disabled{opacity:.6;cursor:wait}.actions{display:flex;gap:12px;flex-wrap:wrap}.actions>*{flex:1;min-width:130px}[hidden]{display:none!important}#status{min-height:28px;overflow-wrap:anywhere}a{color:inherit}small{line-height:1.5}input:focus-visible,button:focus-visible,select:focus-visible{outline:3px solid #65b890;outline-offset:3px}
+
+label{min-width:0}input,select{min-width:0;max-width:100%}#salesPanel{padding:20px}#salesPanel ul{list-style:none;padding:0}#salesPanel li{display:flex;align-items:center;justify-content:space-between;gap:12px;padding:12px 0;border-bottom:1px solid light-dark(#d7e4dc,#34473c);overflow-wrap:anywhere}#outboxList li,#offlineReviewList li{display:block}#outboxList details{margin:0}#outboxList summary{font-weight:400}#salesPanel li button{width:auto;flex:none}#salesStatus{overflow-wrap:anywhere}details{margin:20px 0}summary{cursor:pointer;padding:12px 0;font-weight:600}.price-row{display:grid;grid-template-columns:1fr 1fr auto;gap:8px}.price-row input{min-width:0}.price-row button{width:auto}.modifier-choice{display:flex;align-items:center;gap:8px}.modifier-choice input,#variantActive{width:22px;min-height:22px}#cartTotal{font-weight:600}.sale-group{margin:20px 0;padding-top:12px;border-top:1px solid light-dark(#d7e4dc,#34473c)}@media(max-width:420px){body{padding:12px}section{padding:16px}.price-row{grid-template-columns:1fr 1fr}.price-row button{grid-column:1/-1}#salesPanel li{flex-wrap:wrap}}
+</style>
+<script src="/app-config.js"></script>
+</head>
+<body><main>
+<header><a href="/">Modular POS</a><h1>Tài khoản & cửa hàng</h1><p>Đăng nhập và truy cập cửa hàng được cấp quyền.</p></header>
+<p id="connectionStatus" role="status"></p><p id="offlineReady"><small>Đang chuẩn bị trang để mở lại khi mất mạng…</small></p>
+<p id="status" role="status" aria-live="polite"></p>
+<section id="loginPanel"><h2>Đăng nhập</h2>
+<form id="loginForm"><label>Email<input id="email" type="email" autocomplete="username" required maxlength="255"></label><label>Mật khẩu<input id="password" type="password" autocomplete="current-password" required minlength="8" maxlength="128"></label><div class="actions"><button type="submit">Đăng nhập</button><button type="button" class="secondary" id="signup">Tạo tài khoản</button></div></form>
+<p><small>Tài khoản mới cần xác nhận email trước khi tạo cửa hàng. Phiên làm việc kết thúc khi tải lại hoặc đóng trang.</small></p></section>
+<section id="workspacePanel" hidden><h2>Cửa hàng của bạn</h2><p id="identity"></p><label>Chọn cửa hàng<select id="stores"></select></label><p id="storeSummary"></p><button id="logout" class="secondary" type="button">Đăng xuất</button></section>
+<section id="bootstrapPanel" hidden><h2>Tạo không gian làm việc</h2><form id="bootstrapForm"><label>Tên thương hiệu<input id="brand" required maxlength="200"></label><label>Mã thương hiệu<input id="slug" required pattern="[a-z0-9][a-z0-9-]{1,62}[a-z0-9]" minlength="3" maxlength="64" placeholder="ca-phe-cua-ban"></label><label>Tên cửa hàng<input id="storeName" required maxlength="200"></label><label>Địa chỉ<input id="address" required maxlength="500"></label><button type="submit">Tạo cửa hàng đầu tiên</button></form></section>
+
+<section id="salesPanel" hidden>
+<h2>Thực đơn & đơn hàng</h2><p id="catalogStatus" role="status"></p><p id="salesStatus" role="status" aria-live="polite"></p>
+<div class="actions"><button id="reloadOrders" type="button" class="secondary">Tải lại dữ liệu</button><button id="newOrder" type="button" class="secondary">Đơn mới</button></div>
+<details open><summary>Đơn lưu tại máy</summary>
+<p id="outboxSummary" role="status">Chưa có đơn chờ đồng bộ.</p>
+<ul id="outboxList"></ul>
+<div class="actions"><button id="syncOutbox" type="button" class="secondary">Đồng bộ hàng đợi</button><button id="retryOutbox" type="button" class="secondary">Thử lại đơn xung đột</button></div>
+<p><small>Không xóa dữ liệu trình duyệt khi còn đơn chưa đồng bộ. Sau khi tải lại trang cần đăng nhập có mạng để truy cập hàng đợi của đúng tài khoản.</small></p>
+</details>
+<details id="offlineReviewArea" hidden><summary>Quản lý duyệt hủy đơn offline</summary>
+<p>Chỉ hủy bản ghi chưa tạo đơn trên server. Đơn đã lên server phải xử lý bằng luồng hủy hoặc hoàn tiền hiện có.</p>
+<p id="offlineReviewCount" role="status"></p><button id="reloadOfflineReviews" type="button" class="secondary">Tải đề nghị đối soát</button>
+<ul id="offlineReviewList"></ul><div class="actions"><button id="previousOfflineReviews" type="button" class="secondary" hidden>Trang trước</button><button id="nextOfflineReviews" type="button" class="secondary" hidden>Trang tiếp theo</button></div>
+</details>
+<div id="sellingArea">
+<form id="orderForm" class="sale-group"><h3 id="orderTitle">Đơn mới</h3>
+<label>Hình thức<select id="channelChoice"><option value="TAKEAWAY">Mang về</option><option value="DINE_IN">Tại bàn</option><option value="DELIVERY">Giao hàng</option></select></label>
+<label id="positionField" hidden>Bàn<select id="positionChoice"></select></label>
+<label>Tên khách<input id="customerName" maxlength="200" autocomplete="name"></label>
+<div id="deliveryFields" hidden><label>Số điện thoại<input id="customerPhone" type="tel" maxlength="20" autocomplete="tel"></label><label>Địa chỉ giao hàng<input id="customerAddress" maxlength="500" autocomplete="street-address"></label></div>
+<label>Món<select id="productChoice"></select></label><label>Size<select id="variantChoice"></select></label><div id="modifierChoices"></div>
+<label>Số lượng<input id="itemQuantity" type="number" min="1" max="999" step="1" value="1"></label><button id="addItem" type="button" class="secondary">Thêm vào đơn</button>
+<ul id="cartItems"></ul><p id="cartTotal">Tạm tính: 0 ₫</p><button id="saveOrder" type="submit">Lưu đơn hàng</button><button id="queueOrder" type="button" class="secondary">Lưu đơn mới tại máy</button></form>
+</div>
+<div class="sale-group"><h3>Đơn đang mở</h3><small>Hiển thị tối đa 200 đơn cập nhật gần nhất.</small><ul id="openOrders"></ul></div>
+
+<form id="offlineCashForm" class="sale-group" hidden><h3>Nhận tiền mặt cho đơn mới tại máy</h3>
+<label>Tiền khách đã đưa (₫)<input id="offlineReceived" type="number" min="0" max="1000000000000" step="1" required></label>
+<label class="modifier-choice"><input type="checkbox" required> Đã nhận tiền; sẽ đồng bộ khi có mạng</label>
+<button type="submit" class="secondary">Lưu đơn và tiền mặt tại máy</button></form>
+<div id="financeArea" class="sale-group" hidden>
+<h3>Ca & thanh toán</h3><p id="shiftSummary"></p>
+<form id="openShiftForm"><label>Tiền mặt đầu ca (₫)<input id="openingCash" type="number" min="0" max="1000000000" step="1" value="0" required></label><button type="submit">Mở ca của tôi</button></form>
+<form id="closeShiftForm" hidden><label>Tiền mặt thực đếm cuối ca (₫)<input id="countedCash" type="number" min="0" max="1000000000000" step="1" required></label><button type="submit">Chốt ca và đối soát</button></form>
+<form id="paymentForm" class="sale-group" hidden><h3>Thu tiền đơn đã lưu</h3><p id="paymentOrderSummary"></p><label>Phương thức<select id="paymentMethod"><option value="CASH">Tiền mặt</option><option value="TRANSFER">Chuyển khoản · xác nhận thủ công</option></select></label><label>Khách đưa / đã nhận (₫)<input id="receivedAmount" type="number" min="0" max="1000000000000" step="1" required></label><label class="modifier-choice" id="transferConfirmField" hidden><input id="transferConfirmed" type="checkbox"> Đã kiểm tra tiền vào tài khoản</label><button type="submit">Xác nhận đã thu đủ tiền</button></form>
+<form id="voidForm" class="sale-group" hidden><label>Lý do hủy đơn chưa thanh toán<input id="voidReason" required minlength="3" maxlength="500"></label><button type="submit" class="secondary">Hủy đơn đã lưu</button></form>
+</div>
+<details id="refundArea" hidden><summary>Hoàn toàn bộ thanh toán</summary><form id="refundForm"><label>Thanh toán gần nhất<select id="refundPayment" required></select></label><label>Lý do hoàn tiền<input id="refundReason" required minlength="3" maxlength="500"></label><label class="modifier-choice"><input type="checkbox" id="refundConfirmed" required> Đã hoàn đủ tiền cho khách theo phương thức gốc</label><button type="submit" class="secondary">Ghi nhận hoàn toàn bộ</button></form></details>
+<details id="reportArea" hidden><summary>Báo cáo doanh thu & ca</summary><form id="reportForm"><label>Ngày theo giờ cửa hàng<input id="reportDate" type="date" required></label><button type="submit" class="secondary">Xem báo cáo ngày</button></form><p id="reportSummary" role="status"></p><h3>Ca gần nhất</h3><ul id="shiftHistory"></ul></details>
+<div id="catalogAdmin" hidden>
+<details><summary>Thêm món, size và topping</summary><form id="productForm"><label>Tên món<input id="productName" required maxlength="200"></label><label>Nhóm món<input id="productCategory" maxlength="100" placeholder="Cà phê"></label><label>Size và giá bán (₫)</label><div id="variantRows"></div><button type="button" class="secondary" id="addVariant">Thêm size</button><label>Topping tùy chọn và giá thêm (₫)</label><div id="modifierRows"></div><button type="button" class="secondary" id="addModifier">Thêm topping</button><button type="submit">Lưu món</button></form></details>
+<details><summary>Cập nhật giá và tình trạng bán</summary><form id="editPriceForm"><label>Món / size<select id="priceVariant" required></select></label><label>Giá bán (₫)<input id="newPrice" type="number" min="0" max="1000000000" step="1" required></label><label class="modifier-choice"><input id="variantActive" type="checkbox"> Đang bán</label><button type="submit">Cập nhật size</button></form></details>
+<details><summary>Thêm bàn</summary><form id="positionForm"><label>Tên bàn<input id="positionName" required maxlength="100" placeholder="Bàn 01"></label><button type="submit">Lưu bàn</button></form></details>
+</div>
+<template id="priceRowTemplate"><div class="price-row"><input type="text" aria-label="Tên size hoặc topping" required maxlength="100"><input type="number" aria-label="Giá tiền đồng" required min="0" max="1000000000" step="1" placeholder="Giá (₫)"><button type="button" class="secondary">Bỏ</button></div></template>
+</section>
+</main><script type="module" src="/assets/account.mjs"></script><script type="module" src="/assets/pwa.mjs"></script></body></html>
