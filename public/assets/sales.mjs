@@ -1,8 +1,9 @@
-import { OfflineStore } from './offline-store.mjs';
+import { OfflineStore, isUnresolved } from './offline-store.mjs';
+import { submitOfflineReview, receiveOfflineReviews, OfflineReviewPanel } from './offline-review.mjs';
 const el=id=>document.getElementById(id);
 const money=value=>`${Number(value).toLocaleString('vi-VN')} ₫`;
 let api,store,context={},products=[],variants=[],modifiers=[],orders=[],cart=[],editing=null,pending=null,generation=0,dirty=false,currentShift=null,payments=[];
-let outbox=null,limited=false;
+let outbox=null,limited=false,reviewPanel=null;
 const connectionFailure=error=>error instanceof TypeError||error.status>=500||error.status===429;
 const status=text=>{el('salesStatus').textContent=text;};
 const rpc=(name,args)=>api.request(`/rest/v1/rpc/${name}`,{method:'POST',body:{p_org_id:store.organization_id,p_store_id:store.id,...args}});
@@ -14,7 +15,7 @@ async function run(action){
  el('stores').disabled=true;
  try{await action();}catch(error){
   const code=error.message;
-  const messages={OPEN_SHIFT_REQUIRED:'Bạn cần mở ca trước khi thu hoặc hoàn tiền.',INSUFFICIENT_PAYMENT:'Số tiền nhận chưa đủ hoặc vượt giới hạn cho phép.',TRANSFER_CONFIRMATION_REQUIRED:'Cần nhận đúng số tiền và xác nhận đã kiểm tra chuyển khoản.',CASH_INSUFFICIENT:'Tiền mặt dự kiến trong ca không đủ để hoàn đơn này.',SHIFT_CLOSED:'Ca đã đóng. Hãy tải lại dữ liệu.',REASON_REQUIRED:'Nhập lý do từ 3 đến 500 ký tự.',ORDER_FINALIZED:'Đơn đã hoàn tất. Không thể thu tiền hoặc sửa lần nữa.',VERSION_CONFLICT:'Đơn đã được máy khác cập nhật. Mở lại đơn để xem dữ liệu mới.',PERMISSION_DENIED:'Bạn chưa được cấp quyền thực hiện thao tác này.',IDEMPOTENCY_KEY_REUSED:'Yêu cầu đã thay đổi. Hãy tải lại danh sách đơn.', '23505':'Tên bàn bị trùng hoặc bàn đã có đơn đang mở.',VARIANT_UNAVAILABLE:'Một size đã ngừng bán. Hãy kiểm tra thực đơn.',DELIVERY_DETAILS_REQUIRED:'Đơn giao hàng cần số điện thoại và địa chỉ.'};
+  const messages={OFFLINE_REVIEW_REQUIRED:'Đơn đang được đề nghị hủy. Đã khóa gửi lại trong lúc quản lý đối soát.',CASH_REFUND_CONFIRMATION_REQUIRED:'Cần xác nhận đã hoàn đúng tiền cho khách trước khi duyệt hủy.',REVIEW_ALREADY_RESOLVED:'Đề nghị đã được xử lý. Hãy tải lại danh sách.',OFFLINE_SALE_ALREADY_COMMITTED:'Đơn đã lên server. Không thể hủy bản ghi offline; hãy kiểm tra đơn và dùng luồng hủy/hoàn tiền.',ONLINE_ORDER_EXISTS:'Server đã có đơn từ yêu cầu này. Hãy kiểm tra đơn trước khi xử lý; không tạo lại đơn mới.',REVIEW_NOT_FOUND:'Không tìm thấy đề nghị được cấp quyền.',OPEN_SHIFT_REQUIRED:'Bạn cần mở ca trước khi thu hoặc hoàn tiền.',INSUFFICIENT_PAYMENT:'Số tiền nhận chưa đủ hoặc vượt giới hạn cho phép.',TRANSFER_CONFIRMATION_REQUIRED:'Cần nhận đúng số tiền và xác nhận đã kiểm tra chuyển khoản.',CASH_INSUFFICIENT:'Tiền mặt dự kiến trong ca không đủ để hoàn đơn này.',SHIFT_CLOSED:'Ca đã đóng. Hãy tải lại dữ liệu.',REASON_REQUIRED:'Nhập lý do từ 3 đến 500 ký tự.',ORDER_FINALIZED:'Đơn đã hoàn tất. Không thể thu tiền hoặc sửa lần nữa.',VERSION_CONFLICT:'Đơn đã được máy khác cập nhật. Mở lại đơn để xem dữ liệu mới.',PERMISSION_DENIED:'Bạn chưa được cấp quyền thực hiện thao tác này.',IDEMPOTENCY_KEY_REUSED:'Yêu cầu đã thay đổi. Hãy tải lại danh sách đơn.', '23505':'Tên bàn bị trùng hoặc bàn đã có đơn đang mở.',VARIANT_UNAVAILABLE:'Một size đã ngừng bán. Hãy kiểm tra thực đơn.',DELIVERY_DETAILS_REQUIRED:'Đơn giao hàng cần số điện thoại và địa chỉ.'};
   status(messages[code]||'Chưa xác nhận được thao tác. Kiểm tra kết nối rồi thử lại cùng yêu cầu.');
  }finally{document.querySelectorAll('#salesPanel button').forEach(b=>{b.disabled=false;});el('saveOrder').disabled=!context.can_sell;el('stores').disabled=el('stores').options.length===0;}
 }
@@ -135,6 +136,8 @@ el('orderForm').addEventListener('submit',e=>{
     await enqueueLocal(false,pending.id); return;
   }
   if(current!==generation)return;
+  if(result.status==='REVIEW_REQUIRED'){status('Đơn đang được đề nghị hủy. Không tạo lại yêu cầu trong lúc quản lý đối soát.');return;}
+  if(result.status==='CANCELLED'){reset();await refresh();status('Yêu cầu này đã được quản lý duyệt hủy sau đối soát. Không tạo thêm đơn.');return;}
   pending=null;reset();await refresh();const order=orders.find(o=>o.id===result.order_id);if(order)await openOrder(order);
   status(`Đã lưu đơn ${result.order_id.slice(0,8)} · Tổng tiền server: ${money(result.total_amount)}. Có thể thu tiền sau khi mở ca.`);
  });
@@ -151,7 +154,7 @@ priceRow('variant');
 window.addEventListener('workspace:ready',async e=>{
  const current=++generation;const detail=e.detail;
  el('salesPanel').hidden=true;context={};limited=false;currentShift=null;payments=[];financePending.clear();reset();
- outbox=null;
+ outbox=null;reviewPanel=null;el('offlineReviewArea').hidden=true;el('offlineReviewList').replaceChildren();
  if(!detail?.store)return;
  api=detail.client;store=detail.store;
  outbox=new OfflineStore({url:api.url,userId:api.userId,organizationId:store.organization_id,storeId:store.id});
@@ -161,6 +164,19 @@ window.addEventListener('workspace:ready',async e=>{
   await refresh();if(current!==generation)return;
   el('salesPanel').hidden=false;status('Đã tải dữ liệu cửa hàng. Có thể lưu đơn mới vào hàng đợi tại máy khi mất mạng.');
   await showOutbox();
+  try{await receiveOfflineReviews(api,store,outbox);}catch(error){
+   if(!connectionFailure(error))throw error;
+   if(current===generation)status('Chưa nhận được kết quả đối soát từ server. Hàng đợi tại máy vẫn được giữ và hiển thị.');
+  }
+  if(current!==generation)return;
+  await showOutbox();
+  reviewPanel=new OfflineReviewPanel({client:api,store,canReview:context.can_review_offline,run,isCurrent:()=>current===generation,onResolved:async receipt=>{
+   const queue=outbox;
+   const record=(await queue.list()).find(r=>r.operationId===receipt.operation_id);
+   if(record)await queue.acceptResult(record,receipt);
+   if(current!==generation)return;
+   await showOutbox();status('Đã duyệt hủy sau đối soát, giữ nguyên lịch sử và chặn gửi lại bản ghi.');
+  }});
  });
 });
 
@@ -201,7 +217,7 @@ el('openShiftForm').addEventListener('submit',e=>{e.preventDefault();run(async()
 });});
 el('closeShiftForm').addEventListener('submit',e=>{e.preventDefault();if(!currentShift)return;run(async()=>{
  const queued=outbox?await outbox.list():[];
- if(queued.some(r=>r.status!=='ACKNOWLEDGED'&&r.payload.p_received_amount!==null)){status('Còn đơn thu tiền tại máy chưa đồng bộ. Cần xử lý trước khi chốt ca.');return;}
+ if(queued.some(r=>isUnresolved(r)&&r.payload.p_received_amount!==null)){status('Còn đơn thu tiền tại máy chưa đồng bộ. Cần xử lý trước khi chốt ca.');return;}
  const current=generation;const closed=await financial('rpc_close_shift',{p_shift_id:currentShift.id,p_counted_cash:Number(el('countedCash').value)});if(current!==generation)return;
  await refreshFinance();el('closeShiftForm').reset();status(`Đã chốt ca · Dự kiến ${money(closed.expected_cash)} · Thực đếm ${money(closed.counted_cash)} · Chênh lệch ${money(closed.difference)}.`);
 });});
@@ -249,14 +265,14 @@ async function showOutbox(){
  const queue=outbox;if(!queue)return;
  const records=await queue.list();if(queue!==outbox)return;
  const conflicts={OFFLINE_PRICE_CONFLICT:'Giá đã thay đổi. Cần đối soát số tiền trước khi thử lại.',OPEN_SHIFT_REQUIRED:'Ca thu tiền không còn mở. Cần đối soát với quản lý.',PERMISSION_DENIED:'Tài khoản không còn quyền đồng bộ đơn này.',VARIANT_UNAVAILABLE:'Size đã ngừng bán.',MODIFIER_UNAVAILABLE:'Topping đã ngừng bán.',POSITION_NOT_FOUND:'Bàn không còn khả dụng.','23505':'Bàn đã có đơn đang mở.',IDEMPOTENCY_KEY_REUSED:'Mã yêu cầu đã được dùng cho dữ liệu khác. Cần đối soát.'};
- const pending=records.filter(r=>r.status!=='ACKNOWLEDGED');
+ const pending=records.filter(isUnresolved);
  el('outboxSummary').textContent=pending.length+' đơn chưa đồng bộ · '+pending.filter(r=>r.status==='CONFLICT').length+' xung đột';
- const visible=[...pending,...records.filter(r=>r.status==='ACKNOWLEDGED').slice(-20).reverse()];
+ const visible=[...pending,...records.filter(r=>!isUnresolved(r)).slice(-20).reverse()];
  el('outboxList').replaceChildren(...visible.map(record=>{
   const li=document.createElement('li');
   const details=document.createElement('details'),summary=document.createElement('summary');
   summary.textContent=record.operationId.slice(0,8)+' · '+money(record.payload.p_expected_total)+' · '+
-   (record.status==='ACKNOWLEDGED'?'Đã đồng bộ':record.status==='CONFLICT'?'Cần xử lý: '+(conflicts[record.error]||'Server chưa chấp nhận dữ liệu. Kiểm tra đơn và quyền tài khoản.'):'Chờ đồng bộ')+
+   (record.status==='CANCELLED'?'Đã hủy sau đối soát':record.status==='ACKNOWLEDGED'?'Đã đồng bộ':record.status==='CONFLICT'?'Cần xử lý: '+(conflicts[record.error]||'Server chưa chấp nhận dữ liệu. Kiểm tra đơn và quyền tài khoản.'):'Chờ đồng bộ')+
    (record.payload.p_received_amount!==null?' · Đã ghi nhận nhận tiền mặt tại máy':'');
   details.append(summary);
   const description=document.createElement('p'),payload=record.payload;
@@ -277,6 +293,22 @@ async function showOutbox(){
    const cash=document.createElement('p');cash.textContent='Khách đưa '+money(payload.p_received_amount)+' · Tiền thừa theo đơn tại máy '+money(payload.p_received_amount-payload.p_expected_total);details.append(cash);
   }
   if(record.result?.order_id){const receipt=document.createElement('p');receipt.textContent='Mã đơn server: '+record.result.order_id;details.append(receipt);}
+  if(record.status==='CANCELLED'){
+   const resolution=document.createElement('p');resolution.textContent='Lý do duyệt hủy: '+record.result.reason+
+    (record.payload.p_received_amount!==null?' · Đã xác nhận hoàn '+money(record.result.cash_refund_amount)+' cho khách.':'');details.append(resolution);
+  }else if(record.reviewId){const notice=document.createElement('p');notice.textContent='Đã khóa gửi lại đơn và chuyển quản lý duyệt hủy. Bấm Đồng bộ hàng đợi để nhận kết quả.';details.append(notice);
+  }else if(record.status==='CONFLICT'&&context.can_sell){
+   const form=document.createElement('form'),label=document.createElement('label'),note=document.createElement('input');
+   label.textContent='Lý do đề nghị hủy bản ghi chưa lên server';note.required=true;note.minLength=3;note.maxLength=500;label.append(note);
+   const button=document.createElement('button');button.type='submit';button.className='secondary';button.textContent='Gửi đề nghị hủy và khóa đồng bộ';const warning=document.createElement('p');warning.textContent='Chỉ gửi khi muốn hủy đơn. Chờ xác nhận đã khóa gửi lại trên server trước khi hoàn tiền cho khách.';form.append(warning,label,button);
+   form.addEventListener('submit',event=>{event.preventDefault();run(async()=>{
+    if(!form.reportValidity())return;
+    const client=api,target=store,current=generation;
+    await submitOfflineReview(client,target,queue,record,note.value.trim());
+    if(current!==generation)return;
+    await showOutbox();status('Đã gửi đề nghị hủy và khóa mã yêu cầu trên server. Giữ bản ghi gốc để nhận kết quả quản lý.');
+   });});details.append(form);
+  }
   li.append(details);return li;
  }));
  el('offlineCashForm').hidden=!currentShift||!context.can_collect;
@@ -284,13 +316,14 @@ async function showOutbox(){
 async function syncLocal(retryConflicts=false){
  const queue=outbox,client=api,target=store,actor=api?.userId,current=generation;
  if(!queue)return;
+ await receiveOfflineReviews(client,target,queue);
  await queue.flush(async(payload,id)=>{
   if(client.userId!==actor||!client.signedIn)throw new Error('AUTH_REQUIRED');
   return client.request('/rest/v1/rpc/rpc_sync_offline_sale',{method:'POST',body:{...payload,p_org_id:target.organization_id,p_store_id:target.id,p_operation_id:id}});
  },{retryConflicts});
  if(current!==generation)return;
  await showOutbox();
- const remaining=(await queue.list()).filter(r=>r.status!=='ACKNOWLEDGED');
+ const remaining=(await queue.list()).filter(isUnresolved);
  await refresh();
  if(!remaining.length){status('Đã đồng bộ toàn bộ hàng đợi.');}
  else status('Hàng đợi vẫn giữ trên máy. Xung đột giá, bàn, ca hoặc quyền cần được kiểm tra; không tự đổi dữ liệu đã ghi nhận.');

@@ -51,5 +51,13 @@ test('IndexedDB outbox persists, isolates users and requires matching acknowledg
   }),0,'Acknowledged operations are not sent again');
   await page.evaluate(async()=>queue.update((await queue.list())[0],{status:'PENDING'}));
   assert.equal(await page.evaluate(async()=>(await queue.list())[0].status),'ACKNOWLEDGED');
+  await page.evaluate(()=>queue.enqueue({p_expected_total:70000,p_received_amount:100000},'cash-cancel'));
+  await page.evaluate(()=>queue.flush(async(payload,id)=>({operation_id:id,status:'CANCELLED',review_id:'review',reason:'Cash returned',cash_refund_amount:100000})));
+  assert.equal(await page.evaluate(async()=>(await queue.list()).find(r=>r.operationId==='cash-cancel').status),'PENDING','Gross tender cannot substitute for the net refund');
+  await page.evaluate(()=>queue.flush(async(payload,id)=>({operation_id:id,status:'CANCELLED',review_id:'review',reason:'Cash returned',cash_refund_amount:70000})));
+  assert.equal(await page.evaluate(async()=>(await queue.list()).find(r=>r.operationId==='cash-cancel').status),'CANCELLED');
+  assert.equal(await page.evaluate(async()=>{let calls=0;await queue.flush(async()=>{calls++;},{retryConflicts:true});return calls;}),0);
+  await page.evaluate(async()=>queue.update((await queue.list()).find(r=>r.operationId==='cash-cancel'),{status:'PENDING'}));
+  assert.equal(await page.evaluate(async()=>(await queue.list()).find(r=>r.operationId==='cash-cancel').status),'CANCELLED');
  }finally{await browser.close();await new Promise(r=>server.close(r));}
 });
